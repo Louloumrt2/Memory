@@ -11,7 +11,7 @@ upgrades = {
     "Bulle_D_Eau" : ("Vous immunise ", lambda args: (('à la ' if (lvl:=args.get('lvl',1)) == 1 else 'aux ') + ('première perte' if lvl == 1 else str(lvl)+' premières pertes '),False)," de PV de chaque partie de memory qui suit"),
     "Reveil_Endormi" : (("A l'achat, augmente définitivement de 0.3 secondes le temps d'affichage des cartes jouées"),),
     "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"x4 points"),
-    "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)==1 else ("(Un effet supplémentaire est révélé au niveau 2)",True))}
+    "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True))}
 
 
 def romain(nb):

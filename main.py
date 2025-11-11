@@ -41,7 +41,8 @@ UPGRADES_COST = {
     "Le_Vrilleur":6,
     "Lame_Sadique":5,
     "Bulle_D_Eau":6,
-    "Reveil_Endormi":4
+    "Reveil_Endormi":4,
+    "Allumette":4
 }
 
 
@@ -635,8 +636,8 @@ def update_draw_score(score, lives) :
             lives[2] = lives[2] / (max(1.1,ADDING_SPEED/2))
             if lives[2]>-1 : lives[2]=0
         
-        if lives[3] > 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
-            lives[3] = lives[3] / (max(1.1,ADDING_SPEED/10))
+        if lives[3] < 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
+            lives[3] = lives[3] / (max(1.1,ADDING_SPEED/40))
             if lives[3]>-0.3 : lives[3]=0
 
         
@@ -668,6 +669,7 @@ def get_row(cards, index) :
 
 
 def add_lives(ch) :
+    global move
     global last_live_change_tick
     last_live_change_tick = pygame.time.get_ticks()
 
@@ -676,6 +678,7 @@ def add_lives(ch) :
             player_lives[3]+=ch
             add_show_effect("Bulle_D_Eau")
             add_score("damage_dodge")
+            return # on ne perd pas de vie du tout
 
 
     if (lvl_lame_sadique := objects_lvl.get("Lame_Sadique",0)) and ch<0 : 
@@ -1398,7 +1401,7 @@ def memo_shop_receive() :
                             card2.remove = True
                 selection.clear()
             elif validation(event) and wait_for_respons :
-                if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 5)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
+                if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
                     add_eclat(-cost)
                     objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
                     add_objet(selection[0].name)
