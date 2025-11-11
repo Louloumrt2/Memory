@@ -712,7 +712,7 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
                 if not selection_locked :
                     if getattr(event, "button", None) == 2 : # touche de pré-selection (clique molette)
                         for card in cards:
-                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove:
+                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and (card not in selection):
                                 if card.selected :
                                     card.selected = False
                                     selection.remove(card)
@@ -728,12 +728,12 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
                                     card.selected = False
                                     selection.remove(card)
                     
-                    if getattr(event, "button", None) == 1 : # touche de révellation (montre une carte gauche)
+                    if getattr(event, "button", None) == 1 : # touche de révellation (montre une carte : clic gauche)
                         for card in cards:
-                            if card.selected and not card.remove and not card.flipped and (card not in selection):
+                            if card.selected and not card.remove and not card.flipped :
                                 card.flipped = True
                             
-                            if not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
+                            if not card in selection and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
                                 card.selected = True 
                                 selection.append(card)
                                 card.flipped = True
