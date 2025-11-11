@@ -38,10 +38,11 @@ UPGRADES_COST = {
     "Michel" : 4,
     "Max" : 5,
     "Flosette":5,
-    "Le_Vrilleur":6
+    "Le_Vrilleur":6,
+    "Lame_Sadique":5,
+    "Bulle_D_Eau":6,
+    "Reveil_Endormi":4
 }
-
-
 
 
 
@@ -85,23 +86,32 @@ all_images = load_images("cards_pict")
 all_objects_images = load_images("objects_pict")
 
 all_images_dict = dict(all_images)
-all_objects_dict = load_images("objects_pict")
+all_objects_dict = dict(all_objects_images)
 
 last_score_change_tick = pygame.time.get_ticks()
+last_live_change_tick = pygame.time.get_ticks()
 
 # PLAYER INFO
 
 selection : list["Card"] = [] # sera la liste des cartes sélectionné -> passe à 2 = révèlent
 selection_locked = False
+
+selection_overload = 0
+
 last_selection = []
 showing_time = 1200
-fighters_lvl = dict()
+fighters_lvl = {}
+objects_lvl = {}
 level_upgrade_base = 1
-apparation_probability = dict()
-player_lives = [20]
-player_score = [0, 0]
+apparation_probability = {}
+player_lives = [20, 0, 0, 0]
+player_score = [0, 0, 0]
 eclat = [10]
 regain_PV_manche = 2
+
+combo = 0
+last_succeed_move = 0
+move= 0
 
 
 training_choices = 3
@@ -113,7 +123,20 @@ scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
 
 def bonus_score(action, var=None) :
-    return (SCORES.get(action,0)+scores_constantes_modifiers_plus.get(action, 0))*scores_constantes_modifiers_mult.get(action,1)
+    base = (SCORES.get(action,0)+scores_constantes_modifiers_plus.get(action, 0))*scores_constantes_modifiers_mult.get(action,1)
+
+    if action in ("match") :
+        if lvl := objects_lvl.get("Allumette",0) :
+            if combo > 1 :
+                add_show_effect("Allumette")
+                base += (combo-1) * (3+lvl)
+
+        if lvl := objects_lvl.get("Lame_Sadique",0) :
+            add_show_effect("Lame_Sadique")
+            base *= (1 + lvl)
+    
+    return int(base)
+
 
 
 # GAME INFO
@@ -126,16 +149,21 @@ BG_COLORS = {
     "end":(80,0,0),
     "shop":(70,75,10),
 }
+
 bg_color = BG_COLORS["play"]
 new_bg_color = None 
 starting_transition_tick = 0
 switch_bg_speed = 0
+
+enclenched_effect = [] # tuple (nom, temps_debut, temps)
 
 
 COLORS_MODIFIERS = {
     "dzzit" : lambda r,g,b,p : (int(min(255, r+(add:= 30*(1-p)))), int(min(255, g+add)),int( max(0, b-add)) )
 }
 
+def gtick() :
+    return pygame.time.get_ticks()
 
 def blend_multi(colors, ratio) :
     nb_couleur = len(colors)
@@ -175,6 +203,51 @@ def switch_bg_to(color, speed = SWITCH_BACKGROUND_SPEED):
     starting_transition_tick = pygame.time.get_ticks()
 
     new_bg_color = color
+
+def add_show_effect(name, time = 350):
+    enclenched_effect.append((name, time, gtick()))
+
+def show_effects(surface = screen) :
+    to_remove = []
+    for name, time, start_time in enclenched_effect :
+            image = all_objects_dict[name]
+
+            elapsed = max(0, gtick() - start_time)
+            ratio = min(1.0, elapsed / time) if time > 0 else 1.0
+
+            if ratio == 1 :
+                to_remove.append((name, time, start_time))
+
+
+            radius = SCREEN_WIDTH // 5
+            center_x = SCREEN_WIDTH
+            center_y = SCREEN_HEIGHT // 2
+
+            theta = -math.pi / 2 + ratio * math.pi
+            x = center_x - radius * math.cos(theta)
+            y = center_y + radius * math.sin(theta)
+
+            # bounce = math.sin(ratio * math.pi) * 20
+            # y -= bounce
+
+            angle_deg =  ratio * 360
+
+            scale = 0.2 + 0.1 * (1 - abs(0.5 - ratio) * 2)
+
+            # préparer et blitter l'image transformée
+            try:
+                surf = pygame.transform.rotozoom(image, angle_deg, scale)
+                rect = surf.get_rect(center=(int(x), int(y)))
+                surface.blit(surf, rect.topleft)
+            except Exception:
+                # si l'image n'est pas correcte, ne rien faire
+                print(Exception)
+
+        
+    
+    for effect in to_remove :
+        enclenched_effect.remove(effect)
+    
 
 
 
@@ -221,10 +294,17 @@ class Card:
             self.bigger_selected_progress -= SELECTED_SPEED / 100
         
         scale_factor = 1 + ((SELECTION_BIGGER_SCALE - 1) * self.bigger_selected_progress)
-        self.rect.width = self.init_size * scale_factor
-        self.rect.height = self.init_size * scale_factor
+
+        # compute integer sizes to keep the rect consistent with blitting and collisions
+        new_width = max(1, int(self.init_size * scale_factor))
+        new_height = max(1, int(self.init_size * scale_factor))
+        self.rect.width = new_width
+        self.rect.height = new_height
         self.x = self.init_x - (self.rect.width - self.init_size) / 2
         self.y = self.init_y - (self.rect.height - self.init_size) / 2
+        # keep the rect's topleft in sync with the visible position (use integers)
+
+        self.rect.topleft = (int(self.x), int(self.y))
         self.bigger_selected_progress = max(0, min(1, self.bigger_selected_progress))
 
         if self.dziited and self.dziit_progress < 1:
@@ -258,6 +338,7 @@ class Card:
                     for card in cards :
                         if card != self and card.name == "8_Volt" and est_adjacent(self, card, lvl) and (card not in selection) :
                             card.dzzit()
+    
                 case "Michel" :
                     cards_michelled = []
                     for card in selection :
@@ -265,6 +346,7 @@ class Card:
                             try_put = card.put_tag(("michel",lvl,(0,255,0)))
                             if try_put : cards_michelled.append(card)
                     if cards_michelled : pop_up(cards_michelled, "michellifié !", cards, message_color=(0,255,150),font=pop_up_font)
+    
                 case "Max" :
                     cards_maxee = []
                     max_effect = []
@@ -274,18 +356,18 @@ class Card:
                     if max_effect and not "Max" in already_done: 
                         
                         for i in range((lvl)//3+1) :
-                            row = get_row(cards, self.row)
-                            if i >= len(row)//2 : break
-                            if row[i].flipped == False and (row[i] not in cards_maxee) : cards_maxee.append(row[i])
-                            if row[-1-i].flipped == False and (row[-1-i] not in cards_maxee) : cards_maxee.append(row[-1-i])
-
-                            for other_max in max_effect :
-                                row = get_row(cards, other_max.row)
-                                if row[i].flipped == False and (row[i] not in cards_maxee) : cards_maxee.append(row[i])
-                                if row[-i-1].flipped == False and (row[-1-i] not in cards_maxee) : cards_maxee.append(row[-1-i])
+                            for unmax in [self]+max_effect :
+                                row = get_row(cards, unmax.row)
+                                try :
+                                    if row[i].flipped == False and (row[i] not in cards_maxee) : cards_maxee.append(row[i])
+                                except IndexError : ...
+                                try:
+                                    if row[-1-i].flipped == False and (row[-1-i] not in cards_maxee) : cards_maxee.append(row[-1-i])
+                                except IndexError : ...
                         
-                        if cards_maxee : small_reveal(cards_maxee, cards, "On envoie du son !", message_color=(240,40,240),font=font, time=showing_time)
+                        if cards_maxee : small_reveal(cards_maxee, cards, "On envoie du son !", message_color=(240,40,240),font=font, time=showing_time, me=[self]+max_effect)
                         already_done.append("Max")
+
                 case "Flosette" :
                     
                     flosette_effect = []
@@ -301,7 +383,7 @@ class Card:
                         if cards_soignee :
                             card_success = []
                             for card in cards_soignee :
-                                try_put = card.put_tag(("soin", lvl+1, (255,120,120))) # On tente d'appliquer le tag
+                                try_put = card.put_tag(("soin", (lvl+2)//2, (255,120,120))) # On tente d'appliquer le tag
                                 if try_put : card_success.append(card)
                             if card_success :
                                 pop_up(card_success, "Soin !", cards, (255,100,100))
@@ -319,15 +401,16 @@ class Card:
             for tag in self.tags :
                 if "michel" == tag[0] :
                     card_revealed = []
-                    for card in (c for c in cards if (not c.remove) and (c!=self) and (c not in selection) and est_adjacent(self, c, 1)) :
+                    for card in (c for c in cards if (not c.remove) and (c!=self) and (not c.flipped) and est_adjacent(self, c, 1)) :
                         if random.random() < (2+tag[1])/10 :
                             card_revealed.append(card)
                     
-                    if card_revealed : small_reveal(card_revealed, cards, time = 400+tag[1]*150, message="Michel ! Michel ?", message_color=(0,255,100))
+                    if card_revealed : small_reveal(card_revealed, cards, time = 400+tag[1]*150, message="Michel ! Michel ?", message_color=(0,255,100), me=[self])
                 if "soin" == tag[0] :
                     if nb_match > 0 :
                         pop_up([self], "Soigné !", cards, tag[2], pop_up_font, time=100)
                         add_lives(1)
+                
 
         
     def check_modification(self, nb_move) :
@@ -520,16 +603,53 @@ def update_draw_eclats():
     eclat_text = font.render(f"Éclats : {eclat[0]}", True, (255, 255, 255))
     screen.blit(eclat_text, (SCREEN_WIDTH - eclat_text.get_width() - 20, 20))
 
+
+def get_color_life(bonus, malus, protec) :
+    if malus :
+        return (255,0,0)
+    elif protec : 
+        return (100,100,255)
+    elif bonus :
+        return (0,255,100)
+    else :
+        return (255,100,100)
+    
 def update_draw_score(score, lives) :
         if score[1] > 0 and pygame.time.get_ticks() - last_score_change_tick > BEFORE_ADDING  :
             score[1] = score[1] / ADDING_SPEED
             if score[1]<1 : score[1]=0
         
-        score_display = math.ceil(score[0] - score[1])
-        score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''}", True, (255, 255, 255))
-        life_text = font.render(f"Vies : {lives[0]}", True, (255, 100, 100))
+        if score[2] < 0 and pygame.time.get_ticks() - last_score_change_tick > BEFORE_ADDING  :
+            score[2] = score[2] / (max(1.1,ADDING_SPEED/2))
+            if score[2]>-1 : score[2]=0
+        
+        score_display = math.ceil(score[0] - score[1] + score[2])
+        score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''} {'- '+str(math.floor(score[2])) if score[2] else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
+
+
+        if lives[1] > 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
+            lives[1] = lives[1] / ADDING_SPEED
+            if lives[1]<1 : lives[1]=0
+        
+        if lives[2] < 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
+            lives[2] = lives[2] / (max(1.1,ADDING_SPEED/2))
+            if lives[2]>-1 : lives[2]=0
+        
+        if lives[3] > 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
+            lives[3] = lives[3] / (max(1.1,ADDING_SPEED/10))
+            if lives[3]>-0.3 : lives[3]=0
+
+        
+        
+        life_display = math.ceil(lives[0] - lives[1] + lives[2])
+        life_text = font.render(f"Vies : {life_display} {'+ '+str(math.floor(lives[1])) if lives[1] else ''} {'- '+str(abs(math.floor(lives[2]))) if lives[2] else ''} {'['+str(abs(math.floor(lives[3])))+']' if lives[3]<0 else '' }", True, get_color_life(lives[1], lives[2], lives[3]))
+
+
+
         screen.blit(score_text, (20, 20))
         screen.blit(life_text, (20, 60))
+
+        if lives[0]<0 : game["state"] = "end_run"
 
 def show_message(message, color = (255,255,255), pos=(20,20), font=font) :
     message_text = font.render(message, True, color)
@@ -548,7 +668,26 @@ def get_row(cards, index) :
 
 
 def add_lives(ch) :
+    global last_live_change_tick
+    last_live_change_tick = pygame.time.get_ticks()
+
+    if (lvl_bulle_deau := objects_lvl.get("Bulle_D_Eau",0)) :
+        if move < lvl_bulle_deau+1 :
+            player_lives[3]+=ch
+            add_show_effect("Bulle_D_Eau")
+            add_score("damage_dodge")
+
+
+    if (lvl_lame_sadique := objects_lvl.get("Lame_Sadique",0)) and ch<0 : 
+        ch -= (lvl_lame_sadique // 4) + 1
+        add_show_effect("Bulle_D_Eau")
+        
     player_lives[0] += ch
+    if ch>=0 :
+        player_lives[1] += ch
+    else :
+        player_lives[2] += ch
+    
     for i in range(ch) :
         if ch>0 : add_score("live_gained")
         else : add_score("life_loosed")
@@ -579,7 +718,10 @@ def update_clock() :
         elif hyper_blend_constant <= 0 :
             hyper_blend_constant = 0
             hyper_blend_var *= -1
-        
+
+        ## On va représenter tout ce qui doit être présent dans ton contexte (passe au dessus)
+        show_effects(screen)
+
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -588,10 +730,17 @@ def add_score(action_or_int, var=None) :
     last_score_change_tick = pygame.time.get_ticks()
     if isinstance(action_or_int, int) :
         player_score[0]+=action_or_int 
-        player_score[1]+=action_or_int 
+        if action_or_int >= 0 :
+            player_score[1]+=action_or_int 
+        else :
+            player_score[2]+=action_or_int
     else :
-        player_score[0] += bonus_score(action_or_int)
-        player_score[1] += bonus_score(action_or_int)
+        score_applique = bonus_score(action_or_int)
+        player_score[0] += score_applique
+        if score_applique >= 0 :
+            player_score[1] += score_applique
+        else :
+            player_score[2] += score_applique
 
 def add_eclat(quantity) :
     eclat[0] += quantity
@@ -616,7 +765,7 @@ def pop_up(cards:list[Card],message, all_cards, message_color=(255,255,255), fon
 
 
 
-def small_reveal(cards : list[Card], all_cards, message=None, message_color = (255,255,255), time=showing_time, font=font) :
+def small_reveal(cards : list[Card], all_cards, message=None, message_color = (255,255,255), time=showing_time, font=font, me : None|list[Card]=None) :
         global selection_locked
         was_locked = selection_locked
         selection_locked = True
@@ -634,6 +783,22 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 update_clock()
             
             starting_time = pygame.time.get_ticks()
+
+            if me and (pipette_lvl := objects_lvl.get("Pipette_Elementaire",0)) :
+                card_enhanced = []
+                all_tags = sorted(sum((list(troupe.tags) for troupe in me),start=[]), key= lambda t : t[1])
+                for tag in all_tags :
+                    tag_upgrade = (tag[0], tag[1]+max(0,pipette_lvl-1), tag[2])
+                    for card in cards :
+                        try_put = card.put_tag(tag_upgrade)
+                        if try_put and card not in card_enhanced : card_enhanced.append(card)
+              
+                if card_enhanced :
+                    add_show_effect("Pipette_Elementaire")
+                    pop_up(card_enhanced, "Pipeté !", all_cards, (230,80,200), time=300)
+            
+                
+
 
             while pygame.time.get_ticks() - starting_time < time :
                 
@@ -683,7 +848,7 @@ def est_adjacent(card1,card2, radius=1) :
 
 # --- JEU PRINCIPAL ---
 def play_memory(num_pairs=8, lives=3, forced_cards = None):
-    global selection_locked
+    global selection_locked, move, last_succeed_move, combo
     cards = create_board(num_pairs, forced_cards)
     player_score[0]
     last_selection_time = 0
@@ -761,7 +926,18 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
                 elif pygame.time.get_ticks() - start_show_time > showing_time :
                     names = [t.name for t in selection]
                     if any(names.count(name)>1 for name in names):
+
+
+                        if last_succeed_move == move-1 :
+                            combo = combo + 1
+                        else :
+                            combo = 1
+                        
+                        last_succeed_move = move
                         add_score("match")
+
+
+
                         for c in selection:
                             c.matched = True
                             c.flipped = False
@@ -796,7 +972,7 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
         
 
         # conditions de fin
-        if all(c.remove for c in cards):
+        if all(c.remove for c in cards) and player_lives[0] > 0:
             
             update_draw_score(player_score, player_lives)
             end_text = font.render(f"Grille finite ! Eclats Gagnés : {game['round']*3}", True, (255, 255, 0))
@@ -808,6 +984,8 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
                 add_eclat(game['round']*3)
                 add_lives(regain_PV_manche)
             ending = True
+
+        
         elif player_lives[0] <= 0:
             refresh()
             cards.clear()
@@ -817,8 +995,7 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
             ending = True
         
         
-        pygame.display.flip()
-        clock.tick(FPS)
+        update_clock()
 
 def get_apparition_cards() :
     res = []
@@ -830,7 +1007,6 @@ def get_apparition_cards() :
 
 def refresh() :
     draw_bg()
-    selection.clear()
 
 def get_next_prob(current_prob) :
     return (0.2 if current_prob==0 else current_prob + 0.1) + random.randint(0,10)/100
@@ -1010,9 +1186,12 @@ def go_training() :
                 if pygame.time.get_ticks() - ending_last_time_out > 300 :
                     waiting = False
 
-
-        
         update_clock()
+
+
+
+
+
 
 def end_run() :
     from description import DISPLAY_NAMES
@@ -1087,7 +1266,7 @@ def memo_shop_present():
 
         mouse_pos = pygame.mouse.get_pos()
         for card in last_cards_shop:
-            if card.rect.collidepoint(mouse_pos) and (not previewed_card or not previewed_card.rect.collidepoint(mouse_pos)) :
+            if card.rect.collidepoint(mouse_pos) and (not previewed_card or not previewed_card.rect.collidepoint(mouse_pos)) and waiting :
                 if previewed_card : previewed_card.selected = False
                 previewed_card = card
                 previewed_card.selected = True
@@ -1111,35 +1290,181 @@ def memo_shop_present():
     while not all(card.flip_progress==0 for card in last_cards_shop) :
         refresh()
         screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
-        
+
+        for card in last_cards_shop :
+            card.selected = False
         update_draw_cards(last_cards_shop)
         if previewed_card : previewed_card.draw(screen)
         update_clock()
 
 
+def memo_shop_receive() :
+
+    assert last_cards_shop, "Petite visite au shop avant quand meme ?"
+    global selection_locked
+    selection.clear()
+    selection_locked = False
+    from description import generer_message_de_description
+    from description import desc_italic_font
+
+
+    msg = font.render("Rebienvenu ! Vous vous souvenez bien de tous ?", True, (255, 255, 255))
+    msg2 = desc_italic_font.render("Effectuer une paire pour que l'achat vous soit proposé", True, (255, 255, 255))
+
+    cards_upgrade =  2*last_cards_shop
+
+    order = [i for i in range(len(last_cards_shop))]
+    random.shuffle(order)
+
+    selection.clear()
+    for i,card in enumerate(cards_upgrade) :
+        card.selected = False
+        if i < len(cards_upgrade)//2 :
+            cards_upgrade[i] = Card(last_cards_shop[order[i]].x, card.y-150, card.name, card.image, card.color, card.rect.width, location="shop")
+            cards_upgrade[i].flipped = True
+        else :
+            card.flipped = False
+            card.init_y += card.rect.height - 120
+            card.y = card.init_y
+
+        card.flip_progress = 0
+
+
+    waiting_for_respons = False
+    ending = False 
+    ending_last_time_out = 0
+    while not ending:
+        refresh()
+
+        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
+        screen.blit(msg2, (SCREEN_WIDTH // 2 - msg2.get_width() // 2, 60 + msg.get_height()))
+
         
+        # pygame.draw.rect(screen, blend_multi(((230,200,130), (180,70,160),(120,95,200)), blend_constant), displayer, border_radius=10)
+        update_draw_cards(cards_upgrade)
+        # Afficher les éclats en haut à droite
+        update_draw_eclats()
 
 
+        
+        # Détecter le passage de souris sur une carte
+        mouse_pos = pygame.mouse.get_pos()
+        for card in cards_upgrade:
+            if card.rect.collidepoint(mouse_pos) and card.flip_progress>=0.5 and not card.remove and not ending:
+                description_surface = generer_message_de_description(
+                    {"nom": card.name, "lvl":objects_lvl.get(card.name, 0)+1,"lvl_init": objects_lvl.get(card.name, 0), "prix":UPGRADES_COST.get(card.name, 0)*(objects_lvl.get(card.name, 0)+1)},
+                    width=SCREEN_WIDTH - 20,
+                    height=SCREEN_HEIGHT - 90
+                )
+                if description_surface:
+                    pygame.draw.rect(screen, (0,0,0), pygame.Rect(8,SCREEN_HEIGHT - description_surface.get_height() - 9, description_surface.get_width(), description_surface.get_height()),border_radius=3)
+                    screen.blit(description_surface, (10, SCREEN_HEIGHT - description_surface.get_height() - 10))
+                break
 
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()    
+            elif event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
+                print("a")
+                mouse_pos = event.pos
+                for card in cards_upgrade:
+                    if card.rect.collidepoint(mouse_pos) and card in selection :
+                        card.selected = False
+                        selection.remove(card)  
+                    elif card.rect.collidepoint(mouse_pos) and card not in selection and len(selection)<2 :
+                        card.selected = True
+                        selection.append(card)
+
+                        #cost = UPGRADES_COST.get(card.name, 0) * (fighters_lvl.get(card.name, 0) + 1)
+                        # if eclat[0] >= cost:
+                        #     add_eclat(-cost)
+                        #     fighters_lvl[card.name] = fighters_lvl.get(card.name,0) + updrade_lvl[card.name]  # Augmenter le niveau du combattant
+                        #     last_selection.clear()
+                        #     last_selection.append(card)
+                        #     selection_locked = True
+                        #     for card in all_cards :
+                        #         card.flipped = False
+                        #     ending = True
+            elif rejet(event) and wait_for_respons :
+                selection_locked = False 
+                wait_for_respons = False
+                
+                for card in selection :
+                    card.selected = False
+                    card.remove = True 
+                    for card2 in cards_upgrade :
+                        if card2.name==card.name :
+                            card2.remove = True
+                selection.clear()
+            elif validation(event) and wait_for_respons :
+                if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 5)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
+                    add_eclat(-cost)
+                    objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
+                    add_objet(selection[0].name)
+                
+                selection_locked = False 
+                wait_for_respons = False
+                
+                for card in selection :
+                    card.selected = False
+                    card.remove = True 
+                    for card2 in cards_upgrade :
+                        if card2.name==card.name :
+                            card2.remove = True
+                
+                selection.clear()
+                
+                
+        
+        if len(selection) == 2 :
+            for card in selection : card.flipped = True
+            if all(card.flip_progress==1 for card in selection) :
+                if selection[0].name == selection[1].name :
+                    msg = font.render("Voulez vous acheter ceci pour "+str(UPGRADES_COST.get(selection[0].name,5)*objects_lvl.get(selection[0].name, 1)) +" éclats ?", True, (255, 255, 255))
                     
+                else :
+                    msg = font.render("Mauvaise réponses, cartes perdus !", True, (255, 150, 150))
+                
+                wait_for_respons = True 
+                selection_locked = True
+        
+        elif len([card for card in cards_upgrade if not card.remove]) == 0 :
+            ending = True
+        
+        else :
+            msg = font.render("Rebienvenu ! Vous vous souvenez bien de tous ?" if len([card for card in cards_upgrade if not card.remove])==2*len(last_cards_shop) else "Continuez continuez !!", True, (255, 255, 255))
+            
+
+        
+        update_clock()
     
+    last_cards_shop.clear()
 
 
 
-def memo_shop_receive():
-    ...
+    
 
 def do_next() :
     global state 
     global round_
     global selection_locked
+    global move
 
+    memo_shopped = False
     while True :
+        move = 0
+        
+        if game["round"]%2==0 and not memo_shopped:
+            game["state"]="memo_shop"
+            memo_shopped = True
         if game["state"] == "play" :
             switch_bg_to(BG_COLORS["play"])
 
             selection_locked = False
             play_memory(num_pairs= 2+(game["round"]//2), lives=player_lives[0], forced_cards=get_apparition_cards())
+
+            memo_shopped = False
 
             if sum(player_lives)>0 :
                 game["round"] += 1
@@ -1178,10 +1503,12 @@ def do_next() :
             
             game["state"]= "training"
 
-
-
-
-
+def add_objet(name):
+    lvl = objects_lvl.get(name)
+    if name == "Reveil_Endormi" :
+        global showing_time
+        showing_time += 300
+        add_show_effect("Reveil_Endormi",1500)
 
 
 
@@ -1189,5 +1516,4 @@ def do_next() :
 if __name__ == "__main__":
 
     while True :
-        # game["state"]="memo_shop"
         do_next()

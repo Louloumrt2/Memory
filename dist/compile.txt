@@ -1,0 +1,3 @@
+
+
+pyinstaller --onefile --windowed --add-data "cards_pict;objects_pict" main.py

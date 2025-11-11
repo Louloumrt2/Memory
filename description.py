@@ -5,9 +5,13 @@ upgrades = {
     "8_Volt" : ("Quand elle est jouée, elle fait vibrer les autres 8-Volt sur un rayon de ", lambda args: (args.get('lvl', 1),False), " autour d'elle"),
     "Michel" : ("Applique la marque michel aux cartes jouées avec lui.","","[sub]michel : pour chaque carte adjacente, vous avez ", lambda args: (args.get('lvl', 1) + 2, True), "[sub] chance sur 10 de la réveller pour 0.4 + ", lambda args: (args.get('lvl', 1) * 0.15,True), "[sub] secondes"),
     "Max" : ("Quand plusieurs Max sont joués en même temps,",lambda args: ("révèlent la première et dernière carte de chaque ligne avec un Max (cette effet peut s'améliorer au niveau 3)" if args.get('lvl',1)<3 else f"révèlent les {args.get('lvl',1)//3+1} premières et dernières carte de chaque ligne avec un Max", False), ""),
-    "Flosette" : ("Quand plusieurs Flosettes sont jouées en même temps, applique la marque Soin ",lambda args: (romain(args.get('lvl',1)+1), False)," aux cartes","","dans d'un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain(args.get('lvl',1)+1),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: (args.get('lvl',1)+1,True),"[sub] coups"),
-    "Le_Vrilleur" : ("Quand il est joué, il génère ",lambda args:(args.get('lvl',1)+2,False)," de score pour chaque carte non retournée adjacente")
-}
+    "Flosette" : ("Quand plusieurs Flosettes sont jouées en même temps, applique la marque Soin ",lambda args: (romain((args.get('lvl',2)+2)//2), False)," aux cartes","","dans d'un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain((args.get('lvl',2)+2)//2),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: ((args.get('lvl',2)+2)//2,True),"[sub] coups"),
+    "Le_Vrilleur" : ("Quand il est joué, il génère ",lambda args:(args.get('lvl',1)+2,False)," de score pour chaque carte non retournée adjacente"),
+    "Lame_Sadique" : ("Effectuer un match offre ", lambda args: ('x'+str(1+(args.get('lvl',1)*0.5)),False)," points, mais chaque perte de vie est augmentée de ",lambda args:(1+(args.get('lvl',1)//4),False),"PV"),
+    "Bulle_D_Eau" : ("Vous immunise ", lambda args: (('à la ' if (lvl:=args.get('lvl',1)) == 1 else 'aux ') + ('première perte' if lvl == 1 else str(lvl)+' premières pertes '),False)," de PV de chaque partie de memory qui suit"),
+    "Reveil_Endormi" : (("A l'achat, augmente définitivement de 0.3 secondes le temps d'affichage des cartes jouées"),),
+    "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"x4 points"),
+    "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)==1 else ("(Un effet supplémentaire est révélé au niveau 2)",True))}
 
 
 def romain(nb):
@@ -43,7 +47,10 @@ DISPLAY_NAMES = {
     "Tireur_Pro":"Tireur Pro",
     "Fantome_A_Cheveux":"Fantôme à Cheveux",
     "Croqueur_Avide":"Croqueur Avide",
-    "Les_Elemetistes":"Les Elémétistes"
+    "Les_Elemetistes":"Les Elémétistes",
+    "Reveil_Endormi":"Réveil Endormis",
+    "Lame_Sadique":"Lame Sadique",
+    "Bulle_D_Eau":"Bulle d'eau protectrice"
 }
 
 def entete(args) : # détermine le titre
@@ -53,9 +60,11 @@ def entete(args) : # détermine le titre
 
     if not args.get("proposal", False) :
         if args.get("lvl_init",0) == 0 :
-            text += (("Débloquer la compétence de "+display_name+" ?"),)
+            text += (("Débloquer la compétence de "+display_name+" pour "),)
+            text += (lambda args : (args.get('prix',0), False),)
+            text += ((" éclats ?"),)
         else :
-            text += (("Contre "+str(args.get("prix","0"))+" éclat : gain de niveau de " +display_name+": "+str(args.get("lvl_init",0)) +" -> "),)
+            text += (("Contre "+str(args.get('prix',"0"))+" éclat : gain de niveau de " +display_name+": "+str(args.get("lvl_init",0)) +" -> "),)
             text += ((lambda args : (str(args.get("lvl",0)), False)),)
             text += ((" ?"),)
         
