@@ -7,7 +7,7 @@ import time
 pygame.init()
 
 # --- CONFIGURATION ---
-SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
 
 
 FPS = 60
@@ -42,7 +42,8 @@ UPGRADES_COST = {
     "Lame_Sadique":5,
     "Bulle_D_Eau":6,
     "Reveil_Endormi":4,
-    "Allumette":4
+    "Allumette":4,
+    "Pipette_Elementaire":5,
 }
 
 
@@ -118,7 +119,7 @@ move= 0
 training_choices = 3
 proposal_after_training_prob = 0.3
 shop_choices = 3
-bonus_lvl_probabilities = [0.3**i for i in range(1,6)]
+bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)]
 
 scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
@@ -683,7 +684,7 @@ def add_lives(ch) :
 
     if (lvl_lame_sadique := objects_lvl.get("Lame_Sadique",0)) and ch<0 : 
         ch -= (lvl_lame_sadique // 4) + 1
-        add_show_effect("Bulle_D_Eau")
+        add_show_effect("Lame_Sadique")
         
     player_lives[0] += ch
     if ch>=0 :
@@ -701,6 +702,7 @@ blend_var = 1
 hyper_blend_var = 1
 BLEND_VAR_SPEED = 100
 HYPER_BLEND_VAR_SPED = 400
+
 def update_clock() :
         global blend_constant, blend_var
 
@@ -850,7 +852,7 @@ def est_adjacent(card1,card2, radius=1) :
     return abs(card1.row - card2.row) + abs(card1.col - card2.col)<=radius
 
 # --- JEU PRINCIPAL ---
-def play_memory(num_pairs=8, lives=3, forced_cards = None):
+def play_memory(num_pairs=8, forced_cards = None):
     global selection_locked, move, last_succeed_move, combo
     cards = create_board(num_pairs, forced_cards)
     player_score[0]
@@ -901,7 +903,7 @@ def play_memory(num_pairs=8, lives=3, forced_cards = None):
                             if card.selected and not card.remove and not card.flipped :
                                 card.flipped = True
                             
-                            if not card in selection and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
+                            if not card in selection and not card.remove and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
                                 card.selected = True 
                                 selection.append(card)
                                 card.flipped = True
@@ -1072,8 +1074,8 @@ def proposal(card_name) :
             elif rejet(event) :
                 waiting = False
         
-        pygame.display.flip()
-        clock.tick(FPS)
+        update_clock()
+
     
 
 def acceleration(event) :
@@ -1209,7 +1211,7 @@ def end_run() :
         screen.blit(final_score_text, (SCREEN_WIDTH // 2 - final_score_text.get_width() // 2, 50))
         
         # Display remaining eclats
-        eclat_text = font.render(f"Éclats Restants : {eclat[0]}", True, (255, 200, 100))
+        eclat_text = font.render(f"Éclats Restants : {eclat[0]} | Manche : {game["manche"]}", True, (255, 200, 100))
         screen.blit(eclat_text, (SCREEN_WIDTH // 2 - eclat_text.get_width() // 2, 100))
         
         # Display upgraded fighters
@@ -1223,6 +1225,15 @@ def end_run() :
             screen.blit(fighter_text, (70, y_offset))
             y_offset += 40
         
+        upgraded_text = font.render("Objets :", True, (150, 200, 255))
+        screen.blit(upgraded_text, (50, y_offset))
+        y_offset += 50
+
+        for o_name, level in objects_lvl.items():
+            display_name = DISPLAY_NAMES.get(o_name, o_name)
+            o_text = font.render(f"{o_name} - Niveau {level}", True, (200, 200, 255))
+            screen.blit(o_text, (70, y_offset))
+            y_offset += 40
         # # Display exit message
 
         # exit_text = font.render("Appuyez sur ESPACE pour continuer", True, (255, 255, 255))
@@ -1235,8 +1246,7 @@ def end_run() :
             elif validation(event) or rejet(event):
                 waiting = False
         
-        pygame.display.flip()
-        clock.tick(FPS)
+        update_clock()
 
 
 # VARIABLES POUR LE SHOP :
@@ -1465,7 +1475,7 @@ def do_next() :
             switch_bg_to(BG_COLORS["play"])
 
             selection_locked = False
-            play_memory(num_pairs= 2+(game["round"]//2), lives=player_lives[0], forced_cards=get_apparition_cards())
+            play_memory(num_pairs= 2+(game["round"]//2), forced_cards=get_apparition_cards())
 
             memo_shopped = False
 
