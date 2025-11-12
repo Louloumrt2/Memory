@@ -323,11 +323,16 @@ class Card:
         
     def put_tag(self, tag) :
 
+        remove_tags = set()
         for tag_ in self.tags :
-            if tag_[0] == tag[0] and tag_[1] >= tag[1] :
-                return False
+            if tag_[0] == tag[0] :
+                if tag_[1] >= tag[1] :
+                    return False
+                else :
+                    remove_tags.add(tag_)
         
         add_score("add_tag", var=tag)
+        self.tags -= remove_tags
         self.tags.add(tag)
         return True
 
@@ -1211,7 +1216,7 @@ def end_run() :
         screen.blit(final_score_text, (SCREEN_WIDTH // 2 - final_score_text.get_width() // 2, 50))
         
         # Display remaining eclats
-        eclat_text = font.render(f"Éclats Restants : {eclat[0]} | Manche : {game["manche"]}", True, (255, 200, 100))
+        eclat_text = font.render(f"Éclats Restants : {eclat[0]} | Manche : {game["round"]}", True, (255, 200, 100))
         screen.blit(eclat_text, (SCREEN_WIDTH // 2 - eclat_text.get_width() // 2, 100))
         
         # Display upgraded fighters
