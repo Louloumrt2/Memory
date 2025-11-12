@@ -44,6 +44,8 @@ UPGRADES_COST = {
     "Reveil_Endormi":4,
     "Allumette":4,
     "Pipette_Elementaire":5,
+    "Tireur_Pro":5,
+    "Piquante":6
 }
 
 
@@ -102,10 +104,10 @@ selection_overload = 0
 
 last_selection = []
 showing_time = 1200
-fighters_lvl = {}
+fighters_lvl = {"Piquante":1}
 objects_lvl = {}
 level_upgrade_base = 1
-apparation_probability = {}
+apparation_probability = {"Piquante":1}
 player_lives = [20, 0, 0, 0]
 player_score = [0, 0, 0]
 eclat = [10]
@@ -114,7 +116,7 @@ regain_PV_manche = 2
 combo = 0
 last_succeed_move = 0
 move= 0
-
+charge = 0 # augmenté grâc à certaines actions dont dzzit
 
 training_choices = 3
 proposal_after_training_prob = 0.3
@@ -156,6 +158,8 @@ bg_color = BG_COLORS["play"]
 new_bg_color = None 
 starting_transition_tick = 0
 switch_bg_speed = 0
+awaiting_time = 0
+
 
 enclenched_effect = [] # tuple (nom, temps_debut, temps)
 
@@ -249,9 +253,6 @@ def show_effects(surface = screen) :
     
     for effect in to_remove :
         enclenched_effect.remove(effect)
-    
-
-
 
 
 # --- CLASSE CARTE ---
@@ -338,6 +339,7 @@ class Card:
 
     
     def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move) :
+        global awaiting_time
 
         if lvl :
             match self.name :
@@ -402,6 +404,27 @@ class Card:
                     if eclats :
                         pop_up(proxi, "Drrrr", cards, (70,70,70),time=500)
                         add_score(eclats)
+                
+                case "Tireur_Pro" :
+                    cards_a_cible = []
+                    for card in selection :
+                        if card != self :
+                            try_put = card.put_tag(("cible",lvl,(60,60,60)))
+                            if try_put : cards_a_cible.append(card)
+                    if cards_a_cible : pop_up(cards_a_cible, "Ciblé !", cards, message_color=(150,150,150),font=pop_up_font)
+                
+                case "Piquante" :
+                    if nb_match == 0 :
+                        add_lives(1 + lvl//3)
+                        pop_up([self], "Piquée !", cards, (255,0,0), pop_up_font, time=800)
+                    else :
+                        for _ in range(1 + lvl//3) :
+                            add_score("match")
+                        pop_up([self], "Butin !", cards, (230,200,0), pop_up_font, time=800)
+
+                    
+                
+
             
         
         if self.tags :
@@ -417,6 +440,22 @@ class Card:
                     if nb_match > 0 :
                         pop_up([self], "Soigné !", cards, tag[2], pop_up_font, time=100)
                         add_lives(1)
+        
+        # Activer les effets des tags des autres cartes
+
+        cible_effect = []
+        for card in cards :
+            for tag in card.tags :
+                if tag[0] == "cible" :
+                    if card.flipped == False and ca_match(card, self) :
+                        cible_effect.append(card)
+        
+        if cible_effect :
+            for card in cible_effect :
+                card.dzzit()
+            pop_up(cible_effect, "Ici !", cards, (255,255,255), pop_up_font, time=600)
+        
+
                 
 
         
@@ -557,6 +596,8 @@ class Card:
         surface.blit(rotated, rot_rect.topleft)
     
     def dzzit(self) :
+        global charge
+        charge += 1
         self.dziited = True
         self.stack_color_modifiers.append(COLORS_MODIFIERS["dzzit"])
 
@@ -708,8 +749,8 @@ hyper_blend_var = 1
 BLEND_VAR_SPEED = 100
 HYPER_BLEND_VAR_SPED = 400
 
-def update_clock() :
-        global blend_constant, blend_var
+def update_clock(waiting = 0) :
+        global blend_constant, blend_var, awaiting_time
 
         blend_constant += blend_var/BLEND_VAR_SPEED
         if blend_constant >= 1 :
@@ -734,6 +775,12 @@ def update_clock() :
 
         pygame.display.flip()
         clock.tick(FPS)
+
+        if awaiting_time > 0 :
+            awaiting_time -= 1
+            if awaiting_time < 0 : awaiting_time = 0
+            update_clock() # appel recursif pour gérer le temps d'attente
+            
 
 def add_score(action_or_int, var=None) :
     global last_score_change_tick
