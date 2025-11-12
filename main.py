@@ -104,10 +104,10 @@ selection_overload = 0
 
 last_selection = []
 showing_time = 1200
-fighters_lvl = {"Piquante":1}
+fighters_lvl = {}
 objects_lvl = {}
 level_upgrade_base = 1
-apparation_probability = {"Piquante":1}
+apparation_probability = {}
 player_lives = [20, 0, 0, 0]
 player_score = [0, 0, 0]
 eclat = [10]
@@ -629,8 +629,8 @@ def create_board(num_pairs, forced_pairs = None):
 
     cards = []
     for i in range(total_cards):
-        x = (i % cols) * (size + 10) + 100
-        y = (i // cols) * (size + 10) + 60
+        x = (i % cols) * (size + 10) + 150
+        y = (i // cols) * (size + 10) + 90
         color = (255,150,150)
         cards.append(card := Card(x, y, cards_images[i][0], cards_images[i][1], color, size))
         card.row = i // cols
