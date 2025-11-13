@@ -128,7 +128,7 @@ regain_PV_manche = 2
 combo = 0
 last_succeed_move = 0
 move= 0
-charge = 0 # augmenté grâc à certaines actions dont dzzit
+charge = 8 # augmenté grâc à certaines actions dont dzzit
 
 training_choices = 3
 proposal_after_training_prob = 0.3
@@ -688,7 +688,7 @@ def create_board(num_pairs, forced_pairs = None):
         y = (i // cols) * (size + 10) + 90
         color = (255,150,150)
         cards.append(card := Card(x, y, cards_images[i][0], cards_images[i][1], color, size))
-        card.row = i // cols
+        card.row = i // rows
         card.col = i % cols
 
         # # FOR TEST
@@ -1018,20 +1018,17 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
 
 
 
-def activate_effect(selection, cards, nb_move) :
+def activate_effect(selection, cards : list[Card], nb_move) :
     lesnoms = [card.name for card in selection]
     matches = {card.name : sum(1 for card2 in selection if card2 != card and ca_match(card,card2)) for card in selection}
     already_done = []
     for card in selection: 
         card.activate_effect(matches[card.name], selection, lesnoms, cards, fighters_lvl.get(card.name, 0), already_done, nb_move)
-    
 
-    for object,lvl in objects_lvl.items() :
-        activate_object_effect(object, lvl, cards)
 
 def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # renvoit les colonnes disponibles dans un ordre aléatoire. priviligies_bigger_col : 0 = inactif / n = impacte : colonne plus occupé = plus fort
     if not priviligies_bigger_col :
-        return random.choices(list( cols := set(card.col for card in cards if not card.remove or include_remove)), k=len(cols))
+        num_col = random.choices(list( cols := set(card.col for card in cards if not card.remove or include_remove)), k=len(cols))[0]
     else :
         poids_dict = {}
         for card in cards :
@@ -1039,7 +1036,9 @@ def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # r
                 poids_dict[card.col] = poids_dict.get(card.col,0)+1
         colonnes = [i for i in poids_dict]
         poids = [poids_dict[i]*priviligies_bigger_col for i in poids_dict]
-        return random.choices(colonnes, weights=poids, population=len(colonnes))
+        num_col = random.choices(colonnes, weights=poids, k=len(colonnes))[0]
+    
+    return [card for card in cards if card.col==num_col and not card.remove]
 
 
 
@@ -1049,11 +1048,14 @@ def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # r
 def activate_object_effect(objet, lvl, cards) :
     if objet == "Canon_A_Energie" :
         global charge 
-        if charge > 9 :
-            add_show_effect("Canon_A_Energie", (200+lvl*50)*(charge//9))
-        while charge > 9 :
-            chargee = max(0,charge-9)
-            small_reveal(random_cols(cards, lvl>3 and lvl/3), cards, "BOOOOOOM", message_color=(240,240,100),font=font, time=200+lvl*50, me=None)
+        if charge >= 9 :
+            add_show_effect("Canon_A_Energie", (200+lvl*50)*((charge//9)))
+            wait_with_cards(cards, 200)
+        while charge >= 9 :
+            charge = max(0,charge-9)
+            col = random_cols(cards, lvl>=3 and lvl/3)
+            add_score(2*len(col))
+            small_reveal(col, cards, "BOOOOOOM", message_color=(240,240,100),font=font, time=200+lvl*100, me=None)
 
 
 
@@ -1068,6 +1070,22 @@ def est_adjacent(card1,card2, radius=1) :
 
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
     return abs(card1.row - card2.row) + abs(card1.col - card2.col)<=radius
+
+def wait_with_cards(cards,time) :
+    init = gtick()
+    while gtick() - init < time :
+        draw_bg()
+        update_draw_cards(cards)
+        update_draw_score(player_score,player_lives)
+        update_clock()
+
+def wait_finish_return(cards):
+    # Attendre tant qu'il y a au moins une carte en cours d'animation (0 < progress < 1)
+    while any((card.flip_progress!=1 and card.flipped) or (card.flip_progress!=0 and not card.flipped) for card in cards):
+        draw_bg()
+        update_draw_cards(cards)
+        update_draw_score(player_score, player_lives)
+        update_clock()
 
 # --- JEU PRINCIPAL ---
 def play_memory(num_pairs=8, forced_cards = None):
@@ -1176,6 +1194,11 @@ def play_memory(num_pairs=8, forced_cards = None):
                     
                     for card in cards :
                         card.check_modification(move)
+                    
+                    wait_finish_return(cards)
+
+                    for o, lvl in objects_lvl.items() :
+                        activate_object_effect(o,lvl, cards)
                     
                     last_selection.clear()
                     last_selection.extend(selection)
@@ -1672,7 +1695,7 @@ def memo_shop_receive() :
                         if card2.name==card.name :
                             card2.remove = True
                 selection.clear()
-            elif validation(event) and wait_for_respons :
+            elif validation(event) and waiting_for_respons :
                 if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
                     add_eclat(-cost)
                     objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
@@ -1795,12 +1818,17 @@ def add_object(name):
 # --- LANCEMENT DU JEU ---
 if __name__ == "__main__":
 
-    # Pour beta_test :
-    guaranted = [] # (nom, niveau)
+    # # Pour beta_test :
+    # guaranted = [("8_Volt",4),("Tireur_Pro",4)] # (nom, niveau)
+    # guaranted_objet = [("Canon_A_Energie",5)] # (nom, niveau)
 
-    for name, lvl in guaranted :
-        apparation_probability[name] = 1
-        fighters_lvl[name] = lvl
+    # for name, lvl in guaranted :
+    #     apparation_probability[name] = 1
+    #     fighters_lvl[name] = lvl
+    
+    # for o, lvl in guaranted_objet :
+    #     objects_lvl[o] = lvl 
+    #     add_object(o)
 
     while True :
 
