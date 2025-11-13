@@ -62,6 +62,7 @@ UPGRADES_COST = {
     "Maniak":7,
     "Mc_Cookie":5,
     "Fantome_A_Cheveux":4,
+    "Catchy":4
 }
 
 
@@ -102,6 +103,10 @@ def load_images(folder):
     return images
 
 all_images = load_images("cards_pict")
+
+catchy = next(image for name, image in all_images if name=="Catchy")
+for i in range(len(all_images)) :
+    all_images[i] = (all_images[i][0],catchy)
 
 all_objects_images = load_images("objects_pict")
 
@@ -2002,6 +2007,7 @@ def do_next() :
         if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]):
             game["state"]="memo_shop"
             memo_shopped = True
+        
         if game["state"] == "play" :
             switch_bg_to(BG_COLORS["play"])
 
