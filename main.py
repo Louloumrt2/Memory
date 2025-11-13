@@ -133,7 +133,7 @@ regain_PV_manche = 2
 combo = 0
 last_succeed_move = 0
 move= 0
-charge = 8 # augmenté grâc à certaines actions dont dzzit
+charge = 0 # augmenté grâc à certaines actions dont dzzit
 
 training_choices = 3
 proposal_after_training_prob = 0.3
@@ -174,7 +174,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     combo = 0
     last_succeed_move = 0
     move= 0
-    charge = 8 # augmenté grâc à certaines actions dont dzzit
+    charge = 0 
 
     training_choices = p_training_choices
     proposal_after_training_prob = p_proposal_after_training
@@ -714,7 +714,7 @@ class Card:
     
     def dzzit(self) :
         global charge
-        charge += 1
+        if objects_lvl.get("Canon_A_Energie",0) : charge += 1
         self.dziited = True
         self.stack_color_modifiers.append(COLORS_MODIFIERS["dzzit"])
 
@@ -1046,7 +1046,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                     pop_up(card_enhanced, "Pipeté !", all_cards, (230,80,200), time=300)
             
             for card in cards : # Ceci sert pour Fantome a cheveux
-                if card.name == "Fantome_A_Cheveux" and fighters_lvl.get(card.name,0) :
+                if card.name == "Fantome_A_Cheveux" and fighters_lvl.get(card.name,0) and me :
                     to_add = []
                     for character in me : # Je parcours tout ceux qui m'ont révélé
                         print("Character in me : ",character.name)
@@ -1944,7 +1944,7 @@ def memo_shop_receive() :
                             card2.remove = True
                 selection.clear()
             elif validation(event) and wait_for_respons :
-                if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
+                if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*(objects_lvl.get(selection[0].name, 0)+1)) <= eclat[0] :
                     add_eclat(-cost)
                     objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
                     add_object(selection[0].name)
