@@ -1,11 +1,14 @@
 import pygame
 from font import desc_font, desc_italic_font
 import math
+
+lvll = lambda args : args.get('lvl',1) 
+
 upgrades = {
     "8_Volt" : ("Quand elle est jouée, elle fait vibrer les autres 8-Volt sur un rayon de ", lambda args: (args.get('lvl', 1),False), " autour d'elle"),
-    "Michel" : ("Applique la marque michel aux cartes jouées avec lui.","","[sub]michel : pour chaque carte adjacente, vous avez ", lambda args: (args.get('lvl', 1) + 2, True), "[sub] chance sur 10 de la réveller pour 0.4 + ", lambda args: (args.get('lvl', 1) * 0.15,True), "[sub] secondes"),
-    "Max" : ("Quand plusieurs Max sont joués en même temps,",lambda args: ("révèlent la première et dernière carte de chaque ligne avec un Max (cette effet peut s'améliorer au niveau 3)" if args.get('lvl',1)<3 else f"révèlent les {args.get('lvl',1)//3+1} premières et dernières carte de chaque ligne avec un Max", False), ""),
-    "Flosette" : ("Quand plusieurs Flosettes sont jouées en même temps, applique la marque Soin ",lambda args: (romain((args.get('lvl',2)+2)//2), False)," aux cartes","","dans d'un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain((args.get('lvl',2)+2)//2),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: ((args.get('lvl',2)+2)//2,True),"[sub] coups"),
+    "Michel" : ("Applique la marque michel aux cartes jouées avec lui.","","[sub]michel : pour chaque carte adjacente, vous avez ", lambda args: (args.get('lvl', 1), True), "[sub] chance sur ",lambda args: (args.get('lvl', 1) + 3, True),"[sub] de la réveller pour 0.4 + ", lambda args: (args.get('lvl', 1) * 0.15,True), "[sub] secondes"),
+    "Max" : ("Quand ils sont matchés,",lambda args: (" révèlent la première et dernière carte de chaque ligne avec un Max (cette effet peut s'améliorer au niveau 3)" if args.get('lvl',1)<3 else f"révèlent les {args.get('lvl',1)//3+1} premières et dernières carte de chaque ligne avec un Max", False), ""),
+    "Flosette" : ("Quand elles sont matchées, elles appliquent la marque Soin ",lambda args: (romain((args.get('lvl',2)+2)//2), False)," aux cartes","","dans un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain((args.get('lvl',2)+2)//2),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: ((args.get('lvl',2)+2)//2,True),"[sub] coups"),
     "Le_Vrilleur" : ("Quand il est joué, il génère ",lambda args:(args.get('lvl',1)+2,False)," de score pour chaque carte non retournée adjacente"),
     "Lame_Sadique" : ("Effectuer un match offre ", lambda args: ('x'+str(1+(args.get('lvl',1)*0.5)),False)," points, mais chaque perte de vie est augmentée de ",lambda args:(1+(args.get('lvl',1)//4),False),"PV"),
     "Bulle_D_Eau" : ("Vous immunise ", lambda args: (('à la ' if (lvl:=args.get('lvl',1)) == 1 else 'aux ') + ('première perte' if lvl == 1 else str(lvl)+' premières pertes '),False)," de PV de chaque partie de memory qui suit"),
@@ -13,7 +16,14 @@ upgrades = {
     "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"x4 points"),
     "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True)),
     "Tireur_Pro": ("Applique la marque Ciblé aux cartes jouées avec lui.","","[sub]Ciblé : la carte vibre si elle est de dos pendant que une carte identique est jouée sur une distance de ",lambda args:(args.get('lvl',1)+1,True),"[sub] cases"),
-    "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),}
+    "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
+    "Chat_De_Compagnie": ("Gagnez ", lambda args : (lvll(args), False)," points par soin gagné.","","Vous avez ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+4,False)," d'améliorer chaque soin subis de 1 PV"),
+    "Ghosting": ("Lors de la selection des paires pour les prochaines manches, chaque carte sans compétence a ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+14,False)," d'être remplacée par une troupe avec compétence'.","[sub] Dans la limite du possible"),
+    "Canon_A_Energie": ("Génère un rayon révellant toutes les cartes d'une colonne toute les 9 vibrations de carte effectuées.","","La révélation dure ",lambda a : (200+50*lvll(a)/1000, False), " secondes et génère ",lambda a : (2*lvll(a), False)," points par carte révélée.","",lambda a : (f"La sélection de la colonne ciblée {'très '*((lvll(a)//3)-1)} est améliorée" if lvll(a)>3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
+    "Bouquet_Medicinal":("A l'achat, vous guerris ",lambda a : (lvll(a)*5,False), "PV instantannément"),
+    "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
+    "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
+    "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)")}
 
 
 def romain(nb):
@@ -52,28 +62,37 @@ DISPLAY_NAMES = {
     "Les_Elemetistes":"Les Elémétistes",
     "Reveil_Endormi":"Réveil Endormis",
     "Lame_Sadique":"Lame Sadique",
-    "Bulle_D_Eau":"Bulle d'eau protectrice"
+    "Bulle_D_Eau":"Bulle d'eau protectrice",
+    "Canon_A_Energie":"Canon à Energie",
+    "Pipette_Elementaire":"Pipette Elémentaire",
+    "Bouquet_Medicinal":"Bouquet Médicinal",
+    "Chat_De_Compagnie":"Chat de Compagnie",
 }
 
 def entete(args) : # détermine le titre
     text = tuple()
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
 
-
-    if not args.get("proposal", False) :
+    if args.get("proposal", False) :
+        text += (("Compétence du personnage :"),)
+        text += ((""),)
+    else :
         if args.get("lvl_init",0) == 0 :
             text += (("Débloquer la compétence de "+display_name+" pour "),)
             text += (lambda args : (args.get('prix',0), False),)
             text += ((" éclats ?"),)
         else :
-            text += (("Contre "+str(args.get('prix',"0"))+" éclat : gain de niveau de " +display_name+": "+str(args.get("lvl_init",0)) +" -> "),)
-            text += ((lambda args : (str(args.get("lvl",0)), False)),)
-            text += ((" ?"),)
+            if args.get("show_previous",0) :
+                text += (("Compétence à votre niveau actuelle ( "),)
+                text += ((lambda args : (str(args.get("lvl",0)), False)),)
+                text += ((" ) :"),)
+            else :
+                text += (("Contre "+str(args.get('prix',"0"))+" éclat : gain de niveau de " +display_name+": "+str(args.get("lvl_init",0)) +" -> "),)
+                text += ((lambda args : (str(args.get("lvl",0)), False)),)
+                text += ((" ?"),)
         
         text += ((""),)
-    else :
-        text += (("Compétence du personnage :"),)
-        text += ((""),)
+    
     return text
 
 
@@ -154,6 +173,8 @@ def generer_message_via_tokens(tokens, width, height,):
     return final_surface
 
 def generer_message_de_description(args, width, height, green_value=(0, 255, 150)):
+    if args.get('show_previous') : green_value = (180, 50, 200)
+
     nom = args.get("nom", "")
     if nom not in upgrades:
         return None

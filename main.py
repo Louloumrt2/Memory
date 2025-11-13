@@ -18,9 +18,13 @@ SELECTION_BIGGER_SCALE = 1.05
 # REVEAL_DELAY = 1500  # ms (1.5 s)
 
 BEFORE_ADDING = 200  # ms (1 s)
+DUREE_ECLAT_FADING = 1000
 ADDING_SPEED = 1.1
 
 DZITT_SPEED = 15
+BONCE_EFFECT_TIME = 300
+BONCE_EFFECT_INTENSITY = 30
+SHOW_PREVIOUS_SPEED = 0.05
 
 SWITCH_BACKGROUND_SPEED = 1000
 
@@ -45,7 +49,14 @@ UPGRADES_COST = {
     "Allumette":4,
     "Pipette_Elementaire":5,
     "Tireur_Pro":5,
-    "Piquante":6
+    "Piquante":6,
+    "Chat_De_Compagnie":4,
+    "Canon_A_Energie":6,
+    "Bouquet_Medicinal":5,
+    "Ghosting":8,
+    "Maniak":7,
+    "Mc_Cookie":5,
+    "Fantome_A_Cheveux":4,
 }
 
 
@@ -94,6 +105,7 @@ all_objects_dict = dict(all_objects_images)
 
 last_score_change_tick = pygame.time.get_ticks()
 last_live_change_tick = pygame.time.get_ticks()
+last_eclat_change_tick = pygame.time.get_ticks()
 
 # PLAYER INFO
 
@@ -110,7 +122,7 @@ level_upgrade_base = 1
 apparation_probability = {}
 player_lives = [20, 0, 0, 0]
 player_score = [0, 0, 0]
-eclat = [10]
+eclat = [10,0,0]
 regain_PV_manche = 2
 
 combo = 0
@@ -126,7 +138,7 @@ bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)]
 scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
 
-def bonus_score(action, var=None) :
+def bonus_score(action, extravar=None) :
     base = (SCORES.get(action,0)+scores_constantes_modifiers_plus.get(action, 0))*scores_constantes_modifiers_mult.get(action,1)
 
     if action in ("match") :
@@ -138,6 +150,13 @@ def bonus_score(action, var=None) :
         if lvl := objects_lvl.get("Lame_Sadique",0) :
             add_show_effect("Lame_Sadique")
             base *= (1 + lvl)
+
+    if action in ("live_gained") :
+        if lvl := objects_lvl.get("Chat_De_Compagnie",0) :
+            if not any(name for name,_,__ in enclenched_effect):
+                add_show_effect("Chat_De_Compagnie")
+            base += 5
+
     
     return int(base)
 
@@ -159,6 +178,7 @@ new_bg_color = None
 starting_transition_tick = 0
 switch_bg_speed = 0
 awaiting_time = 0
+fading_eclat_start = 0
 
 
 enclenched_effect = [] # tuple (nom, temps_debut, temps)
@@ -188,6 +208,8 @@ def blend(col1,col2, ratio) :
 
 def draw_bg() :
     global bg_color, new_bg_color, starting_transition_tick
+
+
     if starting_transition_tick and new_bg_color:
         ratio = min(1,(pygame.time.get_ticks() - starting_transition_tick) / switch_bg_speed)
         screen.fill(blend(bg_color, new_bg_color, ratio))
@@ -282,13 +304,16 @@ class Card:
         self.row = 0
         self.col = 0
 
-        self.location = "play"
+        self.location = location
+
+        self.character_copied = [] # pour fantome a cheveux
 
     def update(self):
         if self.flipped and self.flip_progress < 1:
-            self.flip_progress += FLIP_SPEED / 100
+            self.flip_progress += FLIP_SPEED / (100 if self.location!="proposal" else 500)
         elif not self.flipped and self.flip_progress > 0:
-            self.flip_progress -= FLIP_SPEED / 100
+            self.flip_progress -= FLIP_SPEED / (100 if self.location!="proposal" else 500)
+        
         self.flip_progress = max(0, min(1, self.flip_progress))
 
         if self.selected and self.bigger_selected_progress < 1:
@@ -304,7 +329,9 @@ class Card:
         self.rect.width = new_width
         self.rect.height = new_height
         self.x = self.init_x - (self.rect.width - self.init_size) / 2
+
         self.y = self.init_y - (self.rect.height - self.init_size) / 2
+        if self.location == "proposal" : self.y += BONCE_EFFECT_INTENSITY * math.cos((gtick() - self.tick_appear) / BONCE_EFFECT_TIME)
         # keep the rect's topleft in sync with the visible position (use integers)
 
         self.rect.topleft = (int(self.x), int(self.y))
@@ -332,17 +359,18 @@ class Card:
                 else :
                     remove_tags.add(tag_)
         
-        add_score("add_tag", var=tag)
+        add_score("add_tag", extravar=tag)
         self.tags -= remove_tags
         self.tags.add(tag)
         return True
 
     
-    def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move) :
+    def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move, custom_name = None) :
         global awaiting_time
 
         if lvl :
-            match self.name :
+            ability_name = self.name if not custom_name else custom_name
+            match ability_name :
                 case "8_Volt" :
                     for card in cards :
                         if card != self and card.name == "8_Volt" and est_adjacent(self, card, lvl) and (card not in selection) :
@@ -362,7 +390,7 @@ class Card:
                     for card in selection :
                         if card != self and ca_match(card, self) :
                             max_effect.append(card)
-                    if max_effect and not "Max" in already_done: 
+                    if nb_match>0 and not "Max" in already_done: 
                         
                         for i in range((lvl)//3+1) :
                             for unmax in [self]+max_effect :
@@ -383,7 +411,7 @@ class Card:
                     for card in selection :
                         if card != self and ca_match(card, self) :
                             flosette_effect.append(card) # On regarde toutes les flosette Non sois meme qui remplisse la condition
-                    if flosette_effect and not "Flosette" in already_done: 
+                    if nb_match>0 and not "Flosette" in already_done: 
                         cards_soignee = []
                         for flo in [self]+flosette_effect : # On effectue une recherche de voisin sur chacune des flosettes
                             for card in not_removed_cards(cards) :
@@ -421,6 +449,18 @@ class Card:
                         for _ in range(1 + lvl//3) :
                             add_score("match")
                         pop_up([self], "Butin !", cards, (230,200,0), pop_up_font, time=800)
+                
+                case "Mc_Cookie" :
+                    if nb_match > 0 :
+                        add_eclat((lvl+1)//2 + ((lvl//2)*len(self.tags)))
+                        pop_up([self], "Vente !", cards, (230,230,0), pop_up_font, time=500)
+                
+                case "Fantome_A_Cheveux" :
+                    if not custom_name :
+                        print("On rentre dans le no_custom_name")
+                        for copied_ability in self.character_copied :
+                            print("On copie l'ability de ",copied_ability)
+                            self.activate_effect(nb_match, selection, lesnoms, cards, min(fighters_lvl.get("Fantome_A_Cheveux",1), fighters_lvl.get(copied_ability,1)),already_done, nb_move, custom_name=copied_ability)
 
                     
                 
@@ -432,7 +472,7 @@ class Card:
                 if "michel" == tag[0] :
                     card_revealed = []
                     for card in (c for c in cards if (not c.remove) and (c!=self) and (not c.flipped) and est_adjacent(self, c, 1)) :
-                        if random.random() < (2+tag[1])/10 :
+                        if random.random() <= (tag[1])/(tag[1]+3) :
                             card_revealed.append(card)
                     
                     if card_revealed : small_reveal(card_revealed, cards, time = 400+tag[1]*150, message="Michel ! Michel ?", message_color=(0,255,100), me=[self])
@@ -605,8 +645,23 @@ class Card:
 def create_board(num_pairs, forced_pairs = None):
     total_cards = num_pairs * 2
 
-    
     chosen_images = random.sample(all_images, num_pairs)
+    if (lvl := objects_lvl.get('Ghosting',0)) :
+                removed = []
+
+                for name,im in chosen_images : # On tente de retirer (avec proba) tous les combattants de niveau 0
+                    if not fighters_lvl.get(name, 0) and random.random() < (lvl/(lvl+15)):
+                        removed.append((name,im))
+                
+                upgrades = [e for e in all_images if e not in chosen_images and fighters_lvl.get(e[0],0)] # On regarde les cartes pas encore tirées et de niveau > 0
+                chosen_images = [e for e in chosen_images if e not in removed] # On retire les carte de removed à chosen_image
+               
+                nb_to_fill = num_pairs - len(chosen_images) # nombre de carte a rajouter
+
+                chosen_images += random.sample(upgrades,min(len(upgrades),nb_to_fill)) # On va les chercher dans les carte pas tirées et de niveau > 0
+
+                if len(chosen_images) < num_pairs : # Si ça suffit toujours pas ???!!! on recommence avec les autres cartes supprimé avant (tant pis...)
+                    chosen_images += random.sample([e for e in all_images if e in removed or e not in chosen_images], num_pairs - len(chosen_images)) 
     
 
     if forced_pairs : 
@@ -647,9 +702,7 @@ def update_draw_cards(cards) :
     for card in cards:
                 card.draw(screen)
 
-def update_draw_eclats():
-    eclat_text = font.render(f"Éclats : {eclat[0]}", True, (255, 255, 255))
-    screen.blit(eclat_text, (SCREEN_WIDTH - eclat_text.get_width() - 20, 20))
+
 
 
 def get_color_life(bonus, malus, protec) :
@@ -671,7 +724,7 @@ def update_draw_score(score, lives) :
             score[2] = score[2] / (max(1.1,ADDING_SPEED/2))
             if score[2]>-1 : score[2]=0
         
-        score_display = math.ceil(score[0] - score[1] + score[2])
+        score_display = math.ceil(score[0] - score[1] - score[2])
         score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''} {'- '+str(math.floor(score[2])) if score[2] else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
 
 
@@ -689,7 +742,7 @@ def update_draw_score(score, lives) :
 
         
         
-        life_display = math.ceil(lives[0] - lives[1] + lives[2])
+        life_display = math.ceil(lives[0] - lives[1] - lives[2])
         life_text = font.render(f"Vies : {life_display} {'+ '+str(math.floor(lives[1])) if lives[1] else ''} {'- '+str(abs(math.floor(lives[2]))) if lives[2] else ''} {'['+str(abs(math.floor(lives[3])))+']' if lives[3]<0 else '' }", True, get_color_life(lives[1], lives[2], lives[3]))
 
 
@@ -699,9 +752,53 @@ def update_draw_score(score, lives) :
 
         if lives[0]<0 : game["state"] = "end_run"
 
-def show_message(message, color = (255,255,255), pos=(20,20), font=font) :
-    message_text = font.render(message, True, color)
-    screen.blit(message_text,pos)
+def update_draw_eclats(fading = 0):
+    global fading_eclat_start
+    global fading_eclat_start
+    # animer l'ajout / retrait comme update_draw_score
+    if eclat[1] > 0 and pygame.time.get_ticks() - last_eclat_change_tick > BEFORE_ADDING*5:
+        eclat[1] = eclat[1] / (max(1.1, ADDING_SPEED / 3))
+        if eclat[1] < 1:
+            eclat[1] = 0
+
+    if eclat[2] < 0 and pygame.time.get_ticks() - last_eclat_change_tick > BEFORE_ADDING*5:
+        eclat[2] = eclat[2] / (max(1.1, ADDING_SPEED / 3))
+        if eclat[2] > -1:
+            eclat[2] = 0
+    
+    if eclat[1] or eclat[2] :
+        fading_eclat_start = gtick()
+
+
+
+
+    eclat_display = math.ceil(eclat[0] - eclat[1] - eclat[2])
+    color = (255, 255, 255) if (not eclat[1] and not eclat[2]) else ((255, 0, 0) if not eclat[1] else (255, 220, 30))
+    eclat_text = font.render(f"Éclats : {eclat_display} {'+ '+str(math.floor(eclat[1]))+' ' if eclat[1] else ''}{'- '+str(abs(math.floor(eclat[2]))) if eclat[2] else ''}", True, color)
+
+    eclat_text.set_alpha(int(255*(1-fading)))
+    screen.blit(eclat_text, (SCREEN_WIDTH - eclat_text.get_width() - 20, 20))
+
+
+OMBRES = {
+    "contour" : lambda dx, dy : True,
+    "sous" : lambda dx, dy : dx < 0,
+}
+
+def show_message(message, color=(255,255,255), pos=(20,20), font=font, recenterx=True, shadow_width=3, type_shadow = OMBRES["contour"], shadow_color = (0,0,0)):
+    text_surf = font.render(message, True, color)
+    shadow_surf = font.render(message, True, shadow_color)
+
+    x = pos[0] - (text_surf.get_width() // 2 if recenterx else 0)
+    y = pos[1]
+
+    for dx in range(-shadow_width, shadow_width + 1):
+        for dy in range(-shadow_width, shadow_width + 1):
+            if dx == 0 and dy == 0 and type_shadow(dx,dy):
+                continue
+            screen.blit(shadow_surf, (x + dx, y + dy))
+
+    screen.blit(text_surf, (x, y))
 
 def curving(ratio) :
     progress = abs(1 - 2*ratio)
@@ -715,12 +812,12 @@ def get_row(cards, index) :
 
 
 
-def add_lives(ch) :
+def add_lives(ch, extra_var=None) :
     global move
     global last_live_change_tick
     last_live_change_tick = pygame.time.get_ticks()
 
-    if (lvl_bulle_deau := objects_lvl.get("Bulle_D_Eau",0)) :
+    if (lvl_bulle_deau := objects_lvl.get("Bulle_D_Eau",0)) and ch<0:
         if move < lvl_bulle_deau+1 :
             player_lives[3]+=ch
             add_show_effect("Bulle_D_Eau")
@@ -731,6 +828,10 @@ def add_lives(ch) :
     if (lvl_lame_sadique := objects_lvl.get("Lame_Sadique",0)) and ch<0 : 
         ch -= (lvl_lame_sadique // 4) + 1
         add_show_effect("Lame_Sadique")
+    
+    if (lvl_chat_comp := objects_lvl.get("Chat_De_Compagnie",0)) and ch>0 : 
+        if random.random() < (lvl_chat_comp / lvl_chat_comp+4) : ch += 1
+        add_show_effect("Chat_De_Compagnie")
         
     player_lives[0] += ch
     if ch>=0 :
@@ -739,8 +840,8 @@ def add_lives(ch) :
         player_lives[2] += ch
     
     for i in range(ch) :
-        if ch>0 : add_score("live_gained")
-        else : add_score("life_loosed")
+        if ch>0 : add_score("live_gained", extra_var)
+        else : add_score("life_loosed", extra_var)
 
 blend_constant = 0
 hyper_blend_constant = 0
@@ -750,6 +851,7 @@ BLEND_VAR_SPEED = 100
 HYPER_BLEND_VAR_SPED = 400
 
 def update_clock(waiting = 0) :
+    
         global blend_constant, blend_var, awaiting_time
 
         blend_constant += blend_var/BLEND_VAR_SPEED
@@ -773,6 +875,12 @@ def update_clock(waiting = 0) :
         ## On va représenter tout ce qui doit être présent dans ton contexte (passe au dessus)
         show_effects(screen)
 
+
+        global fading_eclat_start
+        ratio_fading = 0 if (gtick() - fading_eclat_start) < BEFORE_ADDING*3 else max(0,min(1,(gtick() - fading_eclat_start)/DUREE_ECLAT_FADING))
+
+        update_draw_eclats(fading = ratio_fading)
+
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -782,7 +890,7 @@ def update_clock(waiting = 0) :
             update_clock() # appel recursif pour gérer le temps d'attente
             
 
-def add_score(action_or_int, var=None) :
+def add_score(action_or_int, extravar=None) :
     global last_score_change_tick
     last_score_change_tick = pygame.time.get_ticks()
     if isinstance(action_or_int, int) :
@@ -792,7 +900,7 @@ def add_score(action_or_int, var=None) :
         else :
             player_score[2]+=action_or_int
     else :
-        score_applique = bonus_score(action_or_int)
+        score_applique = bonus_score(action_or_int, extravar)
         player_score[0] += score_applique
         if score_applique >= 0 :
             player_score[1] += score_applique
@@ -800,7 +908,14 @@ def add_score(action_or_int, var=None) :
             player_score[2] += score_applique
 
 def add_eclat(quantity) :
+    global last_eclat_change_tick
+    last_eclat_change_tick = pygame.time.get_ticks()
     eclat[0] += quantity
+    if quantity > 0 :
+        eclat[1] += quantity
+    elif quantity < 0 :
+        eclat[2] += quantity
+    add_score("gain_eclat",extravar=quantity)
 
 
 
@@ -813,13 +928,12 @@ def pop_up(cards:list[Card],message, all_cards, message_color=(255,255,255), fon
                 draw_bg()
                 update_draw_cards(all_cards)
                 for card in cards :
-                    show_message(message, message_color, font=font, pos=(card.rect.x, card.rect.y+10+5*(curving(timer/time))))
+                    show_message(message, message_color, font=font, pos=(card.rect.centerx, card.rect.y+10+5*(curving(timer/time))))
                 update_draw_score(player_score, player_lives)
                 update_clock()
 
 
     
-
 
 
 def small_reveal(cards : list[Card], all_cards, message=None, message_color = (255,255,255), time=showing_time, font=font, me : None|list[Card]=None) :
@@ -835,7 +949,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
             
             while not all(card.flip_progress==1 for card in cards) :
                 draw_bg()
-                show_message(message, message_color)
+                show_message(message, message_color, recenterx=False)
                 update_draw_cards(all_cards)
                 update_clock()
             
@@ -854,13 +968,29 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                     add_show_effect("Pipette_Elementaire")
                     pop_up(card_enhanced, "Pipeté !", all_cards, (230,80,200), time=300)
             
+            for card in cards : # Ceci sert pour Fantome a cheveux
+                if card.name == "Fantome_A_Cheveux" and fighters_lvl.get(card.name,0) :
+                    to_add = []
+                    for character in me : # Je parcours tout ceux qui m'ont révélé
+                        print("Character in me : ",character.name)
+                        if fighters_lvl.get(character.name, 0) : # Je vérifie la personne qui m'a révélé a sa compétence activé
+                            if character.name == "Fantome_A_Cheveux" : # Si c'est un autre fantome à cheveux, j'ajoute toutes ses copies que je n'ai pas
+                                to_add.extend(added := [e.name for e in character.character_copied if e not in card.character_copied and e not in to_add])
+                                print("added",added)
+                            else :
+                                if character.name not in card.character_copied : to_add.append(character.name) # Sinon j'ajoute directement le personnage
+                    
+                    print("to_add",to_add)
+                    card.character_copied.extend(to_add)
+                    
+            
                 
 
 
             while pygame.time.get_ticks() - starting_time < time :
                 
                 draw_bg()
-                show_message(message, message_color)
+                show_message(message, message_color, recenterx=False)
                 update_draw_cards(all_cards)
                 update_clock()
 
@@ -877,7 +1007,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
             
             while not all(card.flip_progress==0 for card in cards) :
                 draw_bg()
-                show_message(message, message_color)
+                show_message(message, message_color, recenterx=False)
                 update_draw_cards(all_cards)
                 update_clock()
         
@@ -894,13 +1024,49 @@ def activate_effect(selection, cards, nb_move) :
     already_done = []
     for card in selection: 
         card.activate_effect(matches[card.name], selection, lesnoms, cards, fighters_lvl.get(card.name, 0), already_done, nb_move)
+    
+
+    for object,lvl in objects_lvl.items() :
+        activate_object_effect(object, lvl, cards)
+
+def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # renvoit les colonnes disponibles dans un ordre aléatoire. priviligies_bigger_col : 0 = inactif / n = impacte : colonne plus occupé = plus fort
+    if not priviligies_bigger_col :
+        return random.choices(list( cols := set(card.col for card in cards if not card.remove or include_remove)), k=len(cols))
+    else :
+        poids_dict = {}
+        for card in cards :
+            if not card.remove or include_remove :
+                poids_dict[card.col] = poids_dict.get(card.col,0)+1
+        colonnes = [i for i in poids_dict]
+        poids = [poids_dict[i]*priviligies_bigger_col for i in poids_dict]
+        return random.choices(colonnes, weights=poids, population=len(colonnes))
+
+
+
+
+
+
+def activate_object_effect(objet, lvl, cards) :
+    if objet == "Canon_A_Energie" :
+        global charge 
+        if charge > 9 :
+            add_show_effect("Canon_A_Energie", (200+lvl*50)*(charge//9))
+        while charge > 9 :
+            chargee = max(0,charge-9)
+            small_reveal(random_cols(cards, lvl>3 and lvl/3), cards, "BOOOOOOM", message_color=(240,240,100),font=font, time=200+lvl*50, me=None)
+
+
 
 
 def ca_match(card1,card2):
     return card1.name == card2.name
 
 def est_adjacent(card1,card2, radius=1) :
-    print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
+    if (card2.name=="Maniak" and fighters_lvl.get("Maniak",0)) : return True 
+    elif (card1.name=="Maniak" and fighters_lvl.get("Maniak",0)>3) : radius += fighters_lvl.get("Maniak",0)//3
+
+
+    # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
     return abs(card1.row - card2.row) + abs(card1.col - card2.col)<=radius
 
 # --- JEU PRINCIPAL ---
@@ -1075,19 +1241,21 @@ def proposal(card_name) :
     selection_locked = False
     
     # Create and display the card in the center
+    msg = font.render("Un combattant souhaite collaborer avec vous !", True, (255, 255, 255))
     card_display = Card(
-        SCREEN_WIDTH // 2 - 50,
-        SCREEN_HEIGHT // 2 - 100,
+        SCREEN_WIDTH // 2 - 150,
+        SCREEN_HEIGHT // 2 - 250 + 100,
         card_name,
         all_images_dict[card_name],
         (255, 150, 150),
-        100,
+        250,
         location="proposal"
     )
+    card_display.tick_appear = gtick()
 
     card_display.flipped = True
 
-    msg = font.render("Un combattant souhaite collaborer avec vous !", True, (255, 255, 255))
+
     description_surface = generer_apparition_message(
         {"nom": card_name,
          "ancienne_probability": apparation_probability.get(card_name, 0)*100,
@@ -1104,7 +1272,7 @@ def proposal(card_name) :
     while waiting:
         refresh()
 
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
+        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 130))
         if description_surface :
             screen.blit(description_surface, (10, SCREEN_HEIGHT // 2 + description_surface.get_height() + card_display.rect.height // 2))
         
@@ -1174,7 +1342,7 @@ def go_training() :
         all_cards.append(Card(x, y, name, image, (150, 150, 255), card_size, location="training"))
         all_cards[-1].flipped = True
 
-
+    show_previous_progress = 0
     waiting = True
     ending = False 
     ending_last_time_out = 0
@@ -1195,15 +1363,57 @@ def go_training() :
         mouse_pos = pygame.mouse.get_pos()
         for card in all_cards:
             if card.rect.collidepoint(mouse_pos) and card.flip_progress>=0.5 and not ending:
+                lvl = fighters_lvl.get(card.name,0)
                 description_surface = generer_message_de_description(
-                    {"nom": card.name, "lvl":fighters_lvl.get(card.name, 0)+updrade_lvl[card.name],"lvl_init": fighters_lvl.get(card.name, 0), "prix":UPGRADES_COST.get(card.name, 0)*(fighters_lvl.get(card.name, 0)+1)},
+                    {"nom": card.name, "lvl":lvl+updrade_lvl[card.name],"lvl_init": lvl, "prix":UPGRADES_COST.get(card.name, 0)*(lvl+1)},
                     width=SCREEN_WIDTH - 20,
                     height=SCREEN_HEIGHT - displayer.height - 80
                 )
+
+                description_surface_previous = None
+                if lvl >= 1 and show_previous_progress>0:
+                    description_surface_previous = generer_message_de_description(
+                        {"nom": card.name, "lvl":lvl, "show_previous":lvl, "lvl_init": lvl, "prix":UPGRADES_COST.get(card.name, 0)*(lvl+1)},
+                        width=SCREEN_WIDTH - 20,
+                        height=SCREEN_HEIGHT - displayer.height - 80
+                    )
+
                 if description_surface:
-                    screen.blit(description_surface, (10, SCREEN_HEIGHT - description_surface.get_height() - 10))
+                    if description_surface_previous and show_previous_progress :
+                        # afficher les deux descriptions en fondu selon show_previous_progress
+                        alpha_prev = max(0, min(1, show_previous_progress))
+                        alpha_curr = 1.0 - alpha_prev
+
+                        # préparer copies pour ne pas modifier les surfaces d'origine
+                        surf_prev = description_surface_previous
+                        surf_curr = description_surface
+
+                        w_prev, h_prev = surf_prev.get_size()
+                        w_curr, h_curr = surf_curr.get_size()
+                        max_w = max(w_prev, w_curr)
+                        max_h = max(h_prev, h_curr)
+
+                        # appliquer l'alpha (0-255)
+                        surf_prev.set_alpha(int(255 * alpha_prev))
+                        surf_curr.set_alpha(int(255 * alpha_curr))
+
+                        # fond noir derrière les descriptions
+                        pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(8, SCREEN_HEIGHT - max_h - 9, max_w+3, max_h+3), border_radius=2)
+
+                        # blit : previous (plus opaque) puis current (plus transparent)
+                        screen.blit(surf_prev, (10, SCREEN_HEIGHT - h_prev - 10))
+                        screen.blit(surf_curr, (10, SCREEN_HEIGHT - h_curr - 10))
+                    else :
+                        pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(8, SCREEN_HEIGHT - 9 - description_surface.get_height(), description_surface.get_width()+3, description_surface.get_height()+3), border_radius=2)
+                        screen.blit(description_surface, (10, SCREEN_HEIGHT - description_surface.get_height() - 10))
+
                 break
 
+        if ((keys := pygame.key.get_pressed())[pygame.K_LCTRL] or keys[pygame.K_RCTRL]):
+                show_previous_progress = min(1,show_previous_progress+SHOW_PREVIOUS_SPEED)
+        else :
+                show_previous_progress = max(0,show_previous_progress-SHOW_PREVIOUS_SPEED)
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -1283,7 +1493,7 @@ def end_run() :
 
         for o_name, level in objects_lvl.items():
             display_name = DISPLAY_NAMES.get(o_name, o_name)
-            o_text = font.render(f"{o_name} - Niveau {level}", True, (200, 200, 255))
+            o_text = font.render(f"{display_name} - Niveau {level}", True, (200, 200, 255))
             screen.blit(o_text, (70, y_offset))
             y_offset += 40
         # # Display exit message
@@ -1366,7 +1576,7 @@ def memo_shop_present():
 def memo_shop_receive() :
 
     assert last_cards_shop, "Petite visite au shop avant quand meme ?"
-    global selection_locked
+    global selection_locked, wait_for_respons
     selection.clear()
     selection_locked = False
     from description import generer_message_de_description
@@ -1466,7 +1676,7 @@ def memo_shop_receive() :
                 if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
                     add_eclat(-cost)
                     objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
-                    add_objet(selection[0].name)
+                    add_object(selection[0].name)
                 
                 selection_locked = False 
                 wait_for_respons = False
@@ -1520,7 +1730,7 @@ def do_next() :
     while True :
         move = 0
         
-        if game["round"]%2==0 and not memo_shopped:
+        if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]) and not (game["state"]=="end_run"):
             game["state"]="memo_shop"
             memo_shopped = True
         if game["state"] == "play" :
@@ -1531,7 +1741,7 @@ def do_next() :
 
             memo_shopped = False
 
-            if sum(player_lives)>0 :
+            if player_lives>[0] :
                 game["round"] += 1
                 game["state"] = "proposal_To_training"
             else :
@@ -1568,17 +1778,30 @@ def do_next() :
             
             game["state"]= "training"
 
-def add_objet(name):
-    lvl = objects_lvl.get(name)
+def add_object(name):
+    lvl = objects_lvl.get(name,0)
+
     if name == "Reveil_Endormi" :
         global showing_time
         showing_time += 300
         add_show_effect("Reveil_Endormi",1500)
+    
+    if name == "Bouquet_Medicinal" :
+        add_lives(lvl*5,"from_heal_object")
+        add_show_effect("Bouquet_Medicinal")
 
 
 
 # --- LANCEMENT DU JEU ---
 if __name__ == "__main__":
 
+    # Pour beta_test :
+    guaranted = [] # (nom, niveau)
+
+    for name, lvl in guaranted :
+        apparation_probability[name] = 1
+        fighters_lvl[name] = lvl
+
     while True :
+
         do_next()
