@@ -8,7 +8,7 @@ pygame.init()
 
 # --- CONFIGURATION ---
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
-
+random.seed(2)
 
 FPS = 60
 FLIP_SPEED = 10
@@ -28,8 +28,13 @@ SHOW_PREVIOUS_SPEED = 0.05
 
 SWITCH_BACKGROUND_SPEED = 1000
 
+run_parameter = {}
+
 # SEED=1893894
 # random.seed(1893894)
+
+best_score = 0
+
 
 SCORES = {
     "match" : 5,
@@ -137,6 +142,60 @@ bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)]
 
 scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
+
+def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3) :
+    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices
+    
+    last_score_change_tick = pygame.time.get_ticks()
+    last_live_change_tick = pygame.time.get_ticks()
+    last_eclat_change_tick = pygame.time.get_ticks()
+
+    # PLAYER INFO
+
+    selection.clear() # sera la liste des cartes sélectionné -> passe à 2 = révèlent
+    selection_locked = False
+
+    selection_overload = 0
+
+    last_selection.clear()
+    showing_time = p_showing_time
+    fighters_lvl.clear()
+    objects_lvl.clear()
+    level_upgrade_base = p_level_upgrade_base
+    apparation_probability.clear()
+    player_lives.clear()
+    player_lives.extend([start_lives, 0, 0, 0])
+    player_score.clear()
+    player_score.extend([0, 0, 0])
+    eclat.clear()
+    eclat.extend([start_eclat,0,0])
+    regain_PV_manche = p_regain_PV_manche
+
+    combo = 0
+    last_succeed_move = 0
+    move= 0
+    charge = 8 # augmenté grâc à certaines actions dont dzzit
+
+    training_choices = p_training_choices
+    proposal_after_training_prob = p_proposal_after_training
+    shop_choices = p_shop_choices
+    bonus_lvl_probabilities.clear()
+    bonus_lvl_probabilities.extend([0.3]+[0.2**i for i in range(2,10)])
+
+    scores_constantes_modifiers_plus.clear()
+    scores_constantes_modifiers_mult.clear()
+
+    game.clear()
+    
+    global memo_shop_
+    last_cards_shop.clear()
+    game["state"] = "play"
+    game["round"]=1
+
+    
+
+
+
 
 def bonus_score(action, extravar=None) :
     base = (SCORES.get(action,0)+scores_constantes_modifiers_plus.get(action, 0))*scores_constantes_modifiers_mult.get(action,1)
@@ -461,6 +520,24 @@ class Card:
                         for copied_ability in self.character_copied :
                             print("On copie l'ability de ",copied_ability)
                             self.activate_effect(nb_match, selection, lesnoms, cards, min(fighters_lvl.get("Fantome_A_Cheveux",1), fighters_lvl.get(copied_ability,1)),already_done, nb_move, custom_name=copied_ability)
+                
+                case "Catchy" :
+                    adjacent_cards = [card for card in cards if est_adjacent(self, card) and not card.remove and card!=self]
+
+                    if len(adjacent_cards)>1 :
+                        the_twos = random.sample(adjacent_cards, k=2)
+                        switch_place(the_twos[0], the_twos[1], cards, 250, message="Et hop !", message_color=(255,40,230),me=[self])
+                        add_score(2+lvl*4)
+                    
+                    if lvl>5:
+                        if random.random()<0.25 :
+                            other_guys = [card for card in cards if card != self and not card.remove]
+                            if other_guys :
+                                wait_with_cards(cards,100)
+                                switch_place(self, other := random.choice(other_guys), cards, 100+100*distance(self,other), "ET HOP !!", message_color=(255,80,210), font=big, me=[self])
+                                add_eclat((lvl+6)//2)
+
+
 
                     
                 
@@ -688,7 +765,7 @@ def create_board(num_pairs, forced_pairs = None):
         y = (i // cols) * (size + 10) + 90
         color = (255,150,150)
         cards.append(card := Card(x, y, cards_images[i][0], cards_images[i][1], color, size))
-        card.row = i // rows
+        card.row = i // cols
         card.col = i % cols
 
         # # FOR TEST
@@ -715,7 +792,7 @@ def get_color_life(bonus, malus, protec) :
     else :
         return (255,100,100)
     
-def update_draw_score(score, lives) :
+def update_draw_score(score = player_score, lives = player_lives) :
         if score[1] > 0 and pygame.time.get_ticks() - last_score_change_tick > BEFORE_ADDING  :
             score[1] = score[1] / ADDING_SPEED
             if score[1]<1 : score[1]=0
@@ -1063,6 +1140,9 @@ def activate_object_effect(objet, lvl, cards) :
 def ca_match(card1,card2):
     return card1.name == card2.name
 
+def distance(card1, card2) :
+    return abs(card1.row - card2.row) + abs(card1.col - card2.col)
+
 def est_adjacent(card1,card2, radius=1) :
     if (card2.name=="Maniak" and fighters_lvl.get("Maniak",0)) : return True 
     elif (card1.name=="Maniak" and fighters_lvl.get("Maniak",0)>3) : radius += fighters_lvl.get("Maniak",0)//3
@@ -1319,7 +1399,8 @@ def proposal(card_name) :
         
         update_clock()
 
-    
+def borne(nb, borneInf=0, borneSup=1):
+    return min(borneSup, max(borneInf, nb))
 
 def acceleration(event) :
     return (event.type == pygame.KEYDOWN and event.key == (pygame.K_SPACE)) or (event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", None) == 2)
@@ -1339,6 +1420,165 @@ def get_bonus_lvl(name) :
     if fighters_lvl.get(name,0) == 0 : return 1
     nb = random.random()
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
+
+from collections import deque
+class Movement() :
+    def __init__(self, stack_position_memory = 50):
+        
+        self.mode = None 
+        self.enable = False
+        self.ended = False
+        self.stack_memory = stack_position_memory
+
+        # Force effet 
+        self.momentum_x = None
+        self.momentum_y = None 
+        
+        self.gravity = 0 # peut être définit à autre chose que 9.81
+
+        # Straight line or trajectory
+        self.start_time = None 
+        self.start_pause_time = None
+
+        self.duration = None
+        self.coords_start = None # tuple de coords x/y
+        self.coords_end = None 
+        self.speed = None
+        self.actual_coords = None
+        self.previous_coords = deque()
+        self.trajectory = []
+    
+    def set_movement(self, duration = None, speed = None, special_trajectory = None, coords_start = None, coords_end = None) :
+        """Met à jour la trajectoire en fonction des paramètres d'entrée. Plusieurs moyen de définir une trajectoire sont possibles
+        - speed + coords_start + coords_end : déplacement à vitesse déterminé
+        - duration + coords_start + coords_end : déplacement à durée déterminé
+        - Vitesse + special_trajectory : trajectoire à vitesse déterminé
+        - duration + special_trajectory : trajectoire à durée déterminé
+        
+        A l'heure actuelle seul les déplacements sont codés, ni les poursuites, ni les trajectoires, ni la physique"""
+        self.mode, self.trajectory, self.speed, self.duration, self.start_time, self.coords_end, self.coords_start, self.actuel_cords, *self.reste = (None,)*30
+        if speed and coords_start and coords_end :
+            self.type = "move_speed"
+            self.speed = speed
+            self.coords_start = coords_start
+            self.coords_end = coords_end
+            self.actual_coords = coords_start
+            self.previous_coords.append(coords_start)
+        elif duration and coords_start and coords_end :
+            self.type = "move_time"
+            self.duration = duration
+            self.coords_start = coords_start
+            self.coords_end = coords_end
+            self.actual_coords = coords_start
+            self.previous_coords.append(coords_start)
+        elif special_trajectory and speed :
+            self.type = "path_speed"
+            self.trajectory = special_trajectory
+            self.previous_coords.append(special_trajectory[0])
+        elif special_trajectory and duration :
+            self.type = "path_duration"
+            self.trajectory = special_trajectory
+            self.previous_coords.append(special_trajectory[0])
+        else :
+            raise ValueError("Vous avez indiqué des mauvais paramètre pour le mouvement")
+    
+    def start(self):
+        if self.ended : return False
+        if self.start_pause_time :
+            time_in_pause = gtick() - self.start_pause_time
+            self.start_pause_time = 0
+            self.start_time += time_in_pause
+
+        if not self.start_time : self.start_time = gtick()
+        self.enable = True
+
+    def pause(self):
+        self.enable = False
+        self.start_pause_time = gtick() 
+    
+    def end(self) :
+        self.enable = False
+        self.ended = True
+    
+    def restart(self) :
+        self.start_time = 0
+        self.actual_coords = self.coords_start
+        self.start_time = gtick()
+        self.start_pause_time = 0
+        self.enable = True
+    
+    def get_delta(self,from_time = 0) :
+        if not from_time :
+            return (self.actual_coords[0] - self.previous_coords[-1][0], self.actual_coords[1] - self.previous_coords[-1][1])
+        else :
+            raise NotImplemented
+    
+    def get_x(self) :
+        return round(self.actual_coords[0])
+    def get_y(self) :
+        return round(self.actual_coords[1])
+    def get_coords(self) :
+        return (self.get_x(), self.get_y())
+    
+    def change_coords(self,new_cords) :
+        self.previous_coords.append(self.actual_coords)
+        if len(self.previous_coords)>self.stack_memory :
+            self.previous_coords.popleft()
+        self.actual_coords = new_cords
+    
+    def update(self) :
+        if self.enable :
+            match self.type :
+                case "move_speed" :
+                    direction = (self.coords_end[0] - self.actual_coords[0], self.coords_end[1] - self.actual_coords[1])
+                    norm = math.sqrt((direction[0]**2) + (direction[1]**2))
+                    move_norme = (direction[0]/norm, direction[1]/norm)
+                    move_final = ((direction[0],move_norme[0]*self.speed), (direction[1],move_norme[1]*self.speed)) # evite de dépasser
+                    self.change_coords(self.actual_coords[0] + move_final[0], self.actual_coords[1] + move_final[1])
+                    if self.get_coords == self.coords_end :
+                        self.end()
+                case "move_time" :
+                    completion_ratio = borne((gtick() - self.start_time) / self.duration)
+                    self.change_coords((self.coords_start[0]*(1-completion_ratio) + self.coords_end[0]*(completion_ratio), self.coords_start[1]*(1-completion_ratio) + self.coords_end[1]*(completion_ratio)))
+                    if completion_ratio == 1 :
+                        self.end()
+
+
+
+
+
+
+
+
+
+
+def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, message_color = (255,255,255), font=font, me : None|list[Card]=None):
+    assert card1 in all_cards and card2 in all_cards
+
+    # Crééons 2 mouvements basé sur les positions des deux cartes
+    switch1 = Movement()
+    switch2 = Movement()
+    coords_1 = (card1.init_x, card1.init_y)
+    coords_2 = (card2.init_x, card2.init_y)
+    print("c1",coords_1)
+    print("c2",coords_2)
+    switch1.set_movement(duration=time, coords_start=coords_1, coords_end=coords_2)
+    switch2.set_movement(duration=time, coords_start=coords_2, coords_end=coords_1)
+    switch1.start(), switch2.start()
+    while (not switch1.ended) or (not switch2.ended) :
+
+        # J'applique le temps qui passe sur les mouvements et je modifie la position des cartes
+        switch1.update(), switch2.update()
+        card1.init_x, card1.init_y = switch1.get_coords()
+        card2.init_x, card2.init_y = switch2.get_coords()
+        draw_bg()
+        # update_draw_score()
+        update_draw_cards(all_cards)
+        if message :
+            show_message(message, message_color, recenterx=False)
+        update_clock()
+    
+    card1.col, card1.row, card2.col, card2.row = card2.col, card2.row, card1.col, card1.row
 
 
 def go_training() :
@@ -1485,25 +1725,33 @@ def go_training() :
 
 def end_run() :
     from description import DISPLAY_NAMES
+    global best_score
     refresh()
-    waiting = True 
+    waiting = 2 
     # Afficher le score et les éclats restants + toutes les cartes amélioré (et leur niveau en survolant dessus)
-    while waiting:
+    while waiting>0:
         refresh()
         
         # Display final score
         final_score_text = font.render(f"Score Final : {player_score[0]}", True, (255, 255, 0))
         screen.blit(final_score_text, (SCREEN_WIDTH // 2 - final_score_text.get_width() // 2, 50))
+
+        y_offset = 0
+
+        if player_score[0]>best_score :
+            final_score_text_best = desc_italic_font.render(f"Meilleur score !", True, (255, 255, 0))
+            screen.blit(final_score_text_best, (SCREEN_WIDTH // 2 - final_score_text.get_width() // 2, 50 + final_score_text.get_height()+5))
+            y_offset += final_score_text_best.get_height() + 10
         
         # Display remaining eclats
         eclat_text = font.render(f"Éclats Restants : {eclat[0]} | Manche : {game["round"]}", True, (255, 200, 100))
-        screen.blit(eclat_text, (SCREEN_WIDTH // 2 - eclat_text.get_width() // 2, 100))
+        screen.blit(eclat_text, (SCREEN_WIDTH // 2 - eclat_text.get_width() // 2, 100+y_offset))
         
         # Display upgraded fighters
         upgraded_text = font.render("Combattants Améliorés :", True, (150, 200, 255))
-        screen.blit(upgraded_text, (50, 150))
+        screen.blit(upgraded_text, (50, 150+y_offset))
         
-        y_offset = 200
+        y_offset += 200
         for fighter_name, level in fighters_lvl.items():
             display_name = DISPLAY_NAMES.get(fighter_name, fighter_name)
             fighter_text = font.render(f"{display_name} - Niveau {level}", True, (200, 200, 255))
@@ -1521,15 +1769,16 @@ def end_run() :
             y_offset += 40
         # # Display exit message
 
-        # exit_text = font.render("Appuyez sur ESPACE pour continuer", True, (255, 255, 255))
-        # screen.blit(exit_text, (SCREEN_WIDTH // 2 - exit_text.get_width() // 2, SCREEN_HEIGHT - 50))
+        if waiting == 1 :
+            exit_text = font.render("Appuyez sur ESPACE ou CLIQUEZ pour recommencer", True, (255, 255, 255))
+            screen.blit(exit_text, (SCREEN_WIDTH // 2 - exit_text.get_width() // 2, SCREEN_HEIGHT - 50))
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             elif validation(event) or rejet(event):
-                waiting = False
+                waiting -= 1
         
         update_clock()
 
@@ -1628,7 +1877,7 @@ def memo_shop_receive() :
         card.flip_progress = 0
 
 
-    waiting_for_respons = False
+    wait_for_respons = False
     ending = False 
     ending_last_time_out = 0
     while not ending:
@@ -1664,7 +1913,6 @@ def memo_shop_receive() :
                 pygame.quit()
                 sys.exit()    
             elif event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
-                print("a")
                 mouse_pos = event.pos
                 for card in cards_upgrade:
                     if card.rect.collidepoint(mouse_pos) and card in selection :
@@ -1695,7 +1943,7 @@ def memo_shop_receive() :
                         if card2.name==card.name :
                             card2.remove = True
                 selection.clear()
-            elif validation(event) and waiting_for_respons :
+            elif validation(event) and wait_for_respons :
                 if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*objects_lvl.get(selection[0].name, 1)) <= eclat[0] :
                     add_eclat(-cost)
                     objects_lvl[selection[0].name] = objects_lvl.get(selection[0].name,0)+1
@@ -1744,16 +1992,14 @@ def memo_shop_receive() :
     
 
 def do_next() :
-    global state 
-    global round_
     global selection_locked
     global move
 
     memo_shopped = False
-    while True :
+    while player_lives[0]>0 :
         move = 0
-        
-        if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]) and not (game["state"]=="end_run"):
+
+        if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]):
             game["state"]="memo_shop"
             memo_shopped = True
         if game["state"] == "play" :
@@ -1764,7 +2010,7 @@ def do_next() :
 
             memo_shopped = False
 
-            if player_lives>[0] :
+            if player_lives[0]>0 :
                 game["round"] += 1
                 game["state"] = "proposal_To_training"
             else :
@@ -1787,10 +2033,6 @@ def do_next() :
 
             game["state"] = game["state"].split("_To_", maxsplit=1)[1] or "play"
         
-        elif game["state"] == "end_run" :
-            switch_bg_to(BG_COLORS["end"])
-            end_run()
-        
         elif game["state"] == "memo_shop" :
             switch_bg_to(BG_COLORS["shop"])
 
@@ -1800,6 +2042,12 @@ def do_next() :
                 memo_shop_receive()
             
             game["state"]= "training"
+    switch_bg_to(BG_COLORS["end"])
+    end_run()
+
+    start_run(**run_parameter)
+    do_next()
+
 
 def add_object(name):
     lvl = objects_lvl.get(name,0)
@@ -1830,6 +2078,10 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-    while True :
 
+
+    start_run(**run_parameter)
+    # apparation_probability["Catchy"]=1
+    # fighters_lvl["Catchy"]=1
+    while True :
         do_next()

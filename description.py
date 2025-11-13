@@ -16,14 +16,15 @@ upgrades = {
     "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"x4 points"),
     "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True)),
     "Tireur_Pro": ("Applique la marque Ciblé aux cartes jouées avec lui.","","[sub]Ciblé : la carte vibre si elle est de dos pendant que une carte identique est jouée sur une distance de ",lambda args:(args.get('lvl',1)+1,True),"[sub] cases"),
-    "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
+    "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez ",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
     "Chat_De_Compagnie": ("Gagnez ", lambda args : (lvll(args), False)," points par soin gagné.","","Vous avez ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+4,False)," d'améliorer chaque soin subis de 1 PV"),
     "Ghosting": ("Lors de la selection des paires pour les prochaines manches, chaque carte sans compétence a ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+14,False)," d'être remplacée par une troupe avec compétence'.","[sub] Dans la limite du possible"),
     "Canon_A_Energie": ("Génère un rayon révellant toutes les cartes d'une colonne toute les 9 vibrations de carte effectuées.","","La révélation dure ",lambda a : (200+100*lvll(a)/1000, False), " secondes et génère ",lambda a : (2*lvll(a), False)," points par carte révélée.","",lambda a : (f"La sélection de la colonne ciblée {'très '*((lvll(a)//3)-1)} est améliorée" if lvll(a)>3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Bouquet_Medicinal":("A l'achat, vous guerris ",lambda a : (lvll(a)*5,False), "PV instantannément"),
-    "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
+    "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
-    "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)")}
+    "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)"),
+    "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False))}
 
 
 def romain(nb):
@@ -67,6 +68,7 @@ DISPLAY_NAMES = {
     "Pipette_Elementaire":"Pipette Elémentaire",
     "Bouquet_Medicinal":"Bouquet Médicinal",
     "Chat_De_Compagnie":"Chat de Compagnie",
+    "Cheffe_Chauffocoeur":"Cheffe Chauffocoeur"
 }
 
 def entete(args) : # détermine le titre
