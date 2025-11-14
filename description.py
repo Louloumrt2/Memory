@@ -2,7 +2,28 @@ import pygame
 from font import desc_font, desc_italic_font
 import math
 
+
+def romain(nb):
+        if not isinstance(nb, int) or nb < 1 or nb > 1000:
+            return ""
+        vals = [
+            (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+            (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+            (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")
+        ]
+        res = []
+        n = nb
+        for value, numeral in vals:
+            if n == 0:
+                break
+            count, n = divmod(n, value)
+            res.append(numeral * count)
+        return "".join(res)
+
+
 lvll = lambda args : args.get('lvl',1) 
+romainlvl = lambda args : (romain(lvll(args)), False)
+romainlvldesc = lambda args : (romain(lvll(args)), True)
 
 upgrades = {
     "8_Volt" : ("Quand elle est jouée, elle fait vibrer les autres 8-Volt sur un rayon de ", lambda args: (args.get('lvl', 1),False), " autour d'elle"),
@@ -24,25 +45,10 @@ upgrades = {
     "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
     "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)"),
-    "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False))}
+    "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False)),
+    "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","","[sub]Englué ", romainlvl,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre de dos")}
 
 
-def romain(nb):
-        if not isinstance(nb, int) or nb < 1 or nb > 1000:
-            return ""
-        vals = [
-            (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
-            (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
-            (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")
-        ]
-        res = []
-        n = nb
-        for value, numeral in vals:
-            if n == 0:
-                break
-            count, n = divmod(n, value)
-            res.append(numeral * count)
-        return "".join(res)
 
 
 

@@ -8,7 +8,6 @@ pygame.init()
 
 # --- CONFIGURATION ---
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
-random.seed(2)
 
 FPS = 60
 FLIP_SPEED = 10
@@ -28,12 +27,15 @@ SHOW_PREVIOUS_SPEED = 0.05
 
 SWITCH_BACKGROUND_SPEED = 1000
 
+accelere = False
 run_parameter = {}
 
 # SEED=1893894
 # random.seed(1893894)
 
 best_score = 0
+
+
 
 
 SCORES = {
@@ -62,7 +64,8 @@ UPGRADES_COST = {
     "Maniak":7,
     "Mc_Cookie":5,
     "Fantome_A_Cheveux":4,
-    "Catchy":4
+    "Catchy":4,
+    "Bubble_Man":3
 }
 
 
@@ -75,6 +78,7 @@ clock = pygame.time.Clock()
 from font import *
 
 
+#============================== DATA LOADING ===============================#
 
 # --- CHARGEMENT DES IMAGES ---
 def resource_path(relative_path):
@@ -104,20 +108,66 @@ def load_images(folder):
 
 all_images = load_images("cards_pict")
 
-catchy = next(image for name, image in all_images if name=="Catchy")
-for i in range(len(all_images)) :
-    all_images[i] = (all_images[i][0],catchy)
 
 all_objects_images = load_images("objects_pict")
 
 all_images_dict = dict(all_images)
 all_objects_dict = dict(all_objects_images)
 
+#=============================== RANDOMISERS =============================#
+
+run_seed = int(random.random()*10000)
+random_event_use = {}
+
+def get_event_id(event_name) :
+    random_event_use[event_name] = random_event_use.get(event_name,0)+1
+    return f"{event_name}+{run_seed}+{random_event_use[event_name]}"
+
+def get_random(event_name="generic_event") :
+    event_id = get_event_id(event_name)
+
+    random.seed(event_id)
+    res = random.random()
+    random.seed(run_seed)
+    return res
+
+def seed_choice(population, event_name="generic_choice") :
+    event_id = get_event_id(event_name)
+
+    random.seed(event_id)
+    choice = random.choice(population)
+    random.seed(run_seed)
+    return choice
+
+def seed_choices(population, k=1, cum_weight=None, event_name="generic_choices") :
+    event_id = get_event_id(event_name)
+
+    random.seed(event_id)
+    if not cum_weight :
+        choices = random.choices(population,k=k)
+    else :
+        choices = random.choices(population,k=k, cum_weights=cum_weight)
+    random.seed(run_seed)
+    return choices
+
+def seed_sample(things, k=1, event_name="generic_sample") :
+    event_id = get_event_id(event_name)
+
+    random.seed(event_id)
+    choice = random.sample(things, k=k)
+    random.seed(run_seed)
+    return choice
+
+
+
+
+#================================= PLAYER_INFO ===================================#
+
+# PLAYER INFO
+
 last_score_change_tick = pygame.time.get_ticks()
 last_live_change_tick = pygame.time.get_ticks()
 last_eclat_change_tick = pygame.time.get_ticks()
-
-# PLAYER INFO
 
 selection : list["Card"] = [] # sera la liste des cartes sélectionné -> passe à 2 = révèlent
 selection_locked = False
@@ -197,6 +247,14 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     game["state"] = "play"
     game["round"]=1
 
+    global run_seed 
+    if seed_input :
+        run_seed = seed_input
+    else :
+        run_seed = int(random.random()*10000)
+    
+    random_event_use.clear()
+
     
 
 
@@ -249,7 +307,8 @@ enclenched_effect = [] # tuple (nom, temps_debut, temps)
 
 
 COLORS_MODIFIERS = {
-    "dzzit" : lambda r,g,b,p : (int(min(255, r+(add:= 30*(1-p)))), int(min(255, g+add)),int( max(0, b-add)) )
+    "dzzit" : lambda r,g,b,p : (int(min(255, r+(add:= 30*(1-p)))), int(min(255, g+add)),int( max(0, b-add)) ),
+    "englue" : lambda r,g,b,p : (int(min(255, r+(add:= 50*(1-p)))), int(min(255, g-(add/2))),int( max(0, b+(add/2))))
 }
 
 def gtick() :
@@ -364,6 +423,7 @@ class Card:
 
         self.dziit_progress = 0
         self.dziited = False
+        self.englued = False
 
         self.row = 0
         self.col = 0
@@ -371,12 +431,20 @@ class Card:
         self.location = location
 
         self.character_copied = [] # pour fantome a cheveux
-
+    
+    def glue_factor(self) :  
+        global accelere              
+        if accelere : 
+            return 0.5
+        new_flip = self.flip_progress if self.flip_progress>0.85 else 0.15 + (1/2*(self.flip_progress-0.15))
+        return max(1.5,((new_flip**4) * (2+self.englued)*10)) if self.englued else 1
     def update(self):
+        if self.remove : self.flip_progress = 0
+
         if self.flipped and self.flip_progress < 1:
-            self.flip_progress += FLIP_SPEED / (100 if self.location!="proposal" else 500)
+            self.flip_progress += FLIP_SPEED / (100 if self.location!="proposal" else 500) 
         elif not self.flipped and self.flip_progress > 0:
-            self.flip_progress -= FLIP_SPEED / (100 if self.location!="proposal" else 500)
+            self.flip_progress -= max(0.001, FLIP_SPEED / (100 if self.location!="proposal" else 500) / self.glue_factor())
         
         self.flip_progress = max(0, min(1, self.flip_progress))
 
@@ -424,9 +492,26 @@ class Card:
                     remove_tags.add(tag_)
         
         add_score("add_tag", extravar=tag)
-        self.tags -= remove_tags
+
+        for tag_r in remove_tags :
+            self.delete_tag(tag_r)
+        if tag[0] == "englue" : self.englued = tag[1]
+
         self.tags.add(tag)
         return True
+    
+    def delete_tag(self,tag) :
+        if tag in self.tags :
+            self.tags.remove(tag)
+        if tag[0]=="englue" :
+            self.englued=0
+    
+    def get_tag(self, tag_name) :
+        for tag in self.tags :
+                if tag[0] == tag_name :
+                    return tag
+            
+        return None
 
     
     def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move, custom_name = None) :
@@ -535,12 +620,21 @@ class Card:
                         add_score(2+lvl*4)
                     
                     if lvl>5:
-                        if random.random()<0.25 :
+                        if get_random("catchy_jump")<0.25 :
                             other_guys = [card for card in cards if card != self and not card.remove]
                             if other_guys :
                                 wait_with_cards(cards,100)
-                                switch_place(self, other := random.choice(other_guys), cards, 100+100*distance(self,other), "ET HOP !!", message_color=(255,80,210), font=big, me=[self])
+                                switch_place(self, other := seed_choice(other_guys, event_name="catchy_where_jump"), cards, 100+100*distance(self,other), "ET HOP !!", message_color=(255,80,210), font=big, me=[self])
                                 add_eclat((lvl+6)//2)
+                
+                case "Bubble_Man" :
+                    cards_bubbled = []
+                    for card in selection :
+                        if card != self :
+                            try_put = card.put_tag(("englue",lvl,(255,190,210)))
+                            if try_put : cards_bubbled.append(card)
+                    if cards_bubbled : pop_up(cards_bubbled, "Englué !", cards, message_color=(255,190,210),font=pop_up_font)
+
 
 
 
@@ -554,7 +648,7 @@ class Card:
                 if "michel" == tag[0] :
                     card_revealed = []
                     for card in (c for c in cards if (not c.remove) and (c!=self) and (not c.flipped) and est_adjacent(self, c, 1)) :
-                        if random.random() <= (tag[1])/(tag[1]+3) :
+                        if get_random("michel") <= (tag[1])/(tag[1]+3) :
                             card_revealed.append(card)
                     
                     if card_revealed : small_reveal(card_revealed, cards, time = 400+tag[1]*150, message="Michel ! Michel ?", message_color=(0,255,100), me=[self])
@@ -717,22 +811,26 @@ class Card:
 
         surface.blit(rotated, rot_rect.topleft)
     
-    def dzzit(self) :
+    def dzzit(self, color=COLORS_MODIFIERS["dzzit"]) :
         global charge
         if objects_lvl.get("Canon_A_Energie",0) : charge += 1
         self.dziited = True
-        self.stack_color_modifiers.append(COLORS_MODIFIERS["dzzit"])
+        self.stack_color_modifiers.append(color)
+
+
+
+
 
 # --- FONCTION DE CREATION DU PLATEAU ---
 def create_board(num_pairs, forced_pairs = None):
     total_cards = num_pairs * 2
 
-    chosen_images = random.sample(all_images, num_pairs)
+    chosen_images = seed_sample(all_images, num_pairs)
     if (lvl := objects_lvl.get('Ghosting',0)) :
                 removed = []
 
                 for name,im in chosen_images : # On tente de retirer (avec proba) tous les combattants de niveau 0
-                    if not fighters_lvl.get(name, 0) and random.random() < (lvl/(lvl+15)):
+                    if not fighters_lvl.get(name, 0) and get_random("ghosting") < (lvl/(lvl+15)):
                         removed.append((name,im))
                 
                 upgrades = [e for e in all_images if e not in chosen_images and fighters_lvl.get(e[0],0)] # On regarde les cartes pas encore tirées et de niveau > 0
@@ -779,6 +877,8 @@ def create_board(num_pairs, forced_pairs = None):
 
 
 def update_draw_cards(cards) :
+
+
     for card in cards:
                 card.update()
     for card in cards:
@@ -912,7 +1012,7 @@ def add_lives(ch, extra_var=None) :
         add_show_effect("Lame_Sadique")
     
     if (lvl_chat_comp := objects_lvl.get("Chat_De_Compagnie",0)) and ch>0 : 
-        if random.random() < (lvl_chat_comp / lvl_chat_comp+4) : ch += 1
+        if get_random("chat_de_compagnie") < (lvl_chat_comp / lvl_chat_comp+4) : ch += 1
         add_show_effect("Chat_De_Compagnie")
         
     player_lives[0] += ch
@@ -966,6 +1066,18 @@ def update_clock(waiting = 0) :
         pygame.display.flip()
         clock.tick(FPS)
 
+        global accelere
+        clavier = pygame.key.get_pressed()
+        if clavier[pygame.K_LSHIFT] and clavier[pygame.K_e]:
+            player_lives[0]=0
+        global accelere 
+        if clavier[pygame.K_SPACE]:
+            accelere = 1
+        else :
+            accelere = 0
+
+
+            
         if awaiting_time > 0 :
             awaiting_time -= 1
             if awaiting_time < 0 : awaiting_time = 0
@@ -1057,7 +1169,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                         print("Character in me : ",character.name)
                         if fighters_lvl.get(character.name, 0) : # Je vérifie la personne qui m'a révélé a sa compétence activé
                             if character.name == "Fantome_A_Cheveux" : # Si c'est un autre fantome à cheveux, j'ajoute toutes ses copies que je n'ai pas
-                                to_add.extend(added := [e.name for e in character.character_copied if e not in card.character_copied and e not in to_add])
+                                to_add.extend(added := [e for e in character.character_copied if e not in card.character_copied and e not in to_add])
                                 print("added",added)
                             else :
                                 if character.name not in card.character_copied : to_add.append(character.name) # Sinon j'ajoute directement le personnage
@@ -1088,6 +1200,8 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 card.flipped = False
             
             while not all(card.flip_progress==0 for card in cards) :
+                for event in pygame.event.get():
+                    acceleration(event)
                 draw_bg()
                 show_message(message, message_color, recenterx=False)
                 update_draw_cards(all_cards)
@@ -1108,9 +1222,9 @@ def activate_effect(selection, cards : list[Card], nb_move) :
         card.activate_effect(matches[card.name], selection, lesnoms, cards, fighters_lvl.get(card.name, 0), already_done, nb_move)
 
 
-def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # renvoit les colonnes disponibles dans un ordre aléatoire. priviligies_bigger_col : 0 = inactif / n = impacte : colonne plus occupé = plus fort
+def random_cols(cards, priviligies_bigger_col = 0, include_remove = False, event_name="generic_random_column") : # renvoit les colonnes disponibles dans un ordre aléatoire. priviligies_bigger_col : 0 = inactif / n = impacte : colonne plus occupé = plus fort
     if not priviligies_bigger_col :
-        num_col = random.choices(list( cols := set(card.col for card in cards if not card.remove or include_remove)), k=len(cols))[0]
+        num_col = seed_choices(list( cols := set(card.col for card in cards if not card.remove or include_remove)), k=len(cols), event_name=event_name)[0]
     else :
         poids_dict = {}
         for card in cards :
@@ -1118,7 +1232,7 @@ def random_cols(cards, priviligies_bigger_col = 0, include_remove = False) : # r
                 poids_dict[card.col] = poids_dict.get(card.col,0)+1
         colonnes = [i for i in poids_dict]
         poids = [poids_dict[i]*priviligies_bigger_col for i in poids_dict]
-        num_col = random.choices(colonnes, weights=poids, k=len(colonnes))[0]
+        num_col = seed_choices(colonnes, weights=poids, k=len(colonnes), event_name=event_name)[0]
     
     return [card for card in cards if card.col==num_col and not card.remove]
 
@@ -1167,6 +1281,8 @@ def wait_with_cards(cards,time) :
 def wait_finish_return(cards):
     # Attendre tant qu'il y a au moins une carte en cours d'animation (0 < progress < 1)
     while any((card.flip_progress!=1 and card.flipped) or (card.flip_progress!=0 and not card.flipped) for card in cards):
+        for event in pygame.event.get() :
+            acceleration(event)
         draw_bg()
         update_draw_cards(cards)
         update_draw_score(player_score, player_lives)
@@ -1188,6 +1304,8 @@ def play_memory(num_pairs=8, forced_cards = None):
 
         # événements
         for event in pygame.event.get():
+            acceleration(event)
+
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1331,7 +1449,7 @@ def play_memory(num_pairs=8, forced_cards = None):
 def get_apparition_cards() :
     res = []
     for name, prob in apparation_probability.items() :
-        if random.random() <= prob :
+        if get_random("apparation") <= prob :
             res.append(name)
     
     return res
@@ -1408,7 +1526,13 @@ def borne(nb, borneInf=0, borneSup=1):
     return min(borneSup, max(borneInf, nb))
 
 def acceleration(event) :
+    if pygame.key.get_pressed()[pygame.K_SPACE] :
+        global accelere
+        accelere = 1
+    else :
+        accelere = 0
     return (event.type == pygame.KEYDOWN and event.key == (pygame.K_SPACE)) or (event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", None) == 2)
+
 def validation(event):
     return (
         (event.type == pygame.KEYDOWN and event.key in (pygame.K_y, pygame.K_SPACE, pygame.K_o))
@@ -1423,7 +1547,7 @@ def rejet(event):
 
 def get_bonus_lvl(name) :
     if fighters_lvl.get(name,0) == 0 : return 1
-    nb = random.random()
+    nb = get_random("bonus_lvl")
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
 
 from collections import deque
@@ -1547,8 +1671,7 @@ class Movement() :
                     self.change_coords((self.coords_start[0]*(1-completion_ratio) + self.coords_end[0]*(completion_ratio), self.coords_start[1]*(1-completion_ratio) + self.coords_end[1]*(completion_ratio)))
                     if completion_ratio == 1 :
                         self.end()
-
-
+    
 
 
 
@@ -1559,6 +1682,19 @@ class Movement() :
 
 def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, message_color = (255,255,255), font=font, me : None|list[Card]=None):
     assert card1 in all_cards and card2 in all_cards
+
+    # Vérifions que l'échange est possible
+    card_englued : list[Card] = []
+    for card in (card1,card2) :
+        if (t:=card.get_tag("englue")) :
+            card_englued.append(card)
+    
+    if card_englued :
+        for card in card_englued :
+            card.dzzit(color=COLORS_MODIFIERS["englue"])
+        pop_up(card_englued, "Collé !", all_cards, message_color=(255,190,210))
+        return False
+
 
     # Crééons 2 mouvements basé sur les positions des deux cartes
     switch1 = Movement()
@@ -1586,6 +1722,10 @@ def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, me
     card1.col, card1.row, card2.col, card2.row = card2.col, card2.row, card1.col, card1.row
 
 
+
+    return True
+
+
 def go_training() :
     # Nettoie l'écran et affiche un écran "fresh" en attendant une action de l'utilisateur
     global selection_locked
@@ -1595,7 +1735,7 @@ def go_training() :
 
 
     msg = font.render("C'est l'heure de l'entrainement ! Mais qui entrainer ?", True, (255, 255, 255))
-    cards_upgrade = random.sample([card for card in all_images if UPGRADES_COST.get(card[0])],training_choices)
+    cards_upgrade = seed_sample([card for card in all_images if UPGRADES_COST.get(card[0])],training_choices, event_name="training_choices")
     displayer = pygame.Rect(SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3)
     card_size = min((displayer.width - (training_choices + 1) * 20) // training_choices, displayer.height - 20)
     all_cards : list[Card] = []
@@ -1689,7 +1829,7 @@ def go_training() :
             elif rejet(event):
                 waiting = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_r :
-                cards_upgrade = random.sample(all_images,training_choices)
+                cards_upgrade = seed_sample(all_images,training_choices, event_name="training")
                 displayer = pygame.Rect(SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
                 card_size = min((displayer.width - (training_choices + 1) * 20) // training_choices, displayer.height - 100)
                 all_cards = []
@@ -1698,6 +1838,8 @@ def go_training() :
                     y = displayer.y + (displayer.height - card_size) // 2
                     all_cards.append(Card(x, y, name, image, (150, 150, 255), card_size, location="training"))
                     all_cards[-1].flipped = True
+                    updrade_lvl.clear()
+                    updrade_lvl.update({c : get_bonus_lvl(c) for c,_ in cards_upgrade})
                 
             elif event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
                 mouse_pos = event.pos
@@ -1725,7 +1867,7 @@ def go_training() :
 
 
 
-
+seed_input = None
 
 
 def end_run() :
@@ -1733,6 +1875,7 @@ def end_run() :
     global best_score
     refresh()
     waiting = 2 
+    seed = []
     # Afficher le score et les éclats restants + toutes les cartes amélioré (et leur niveau en survolant dessus)
     while waiting>0:
         refresh()
@@ -1775,10 +1918,18 @@ def end_run() :
         # # Display exit message
 
         if waiting == 1 :
-            exit_text = font.render("Appuyez sur ESPACE ou CLIQUEZ pour recommencer", True, (255, 255, 255))
+            exit_text = font.render("CLIQUEZ pour recommencer", True, (255, 255, 255))
             screen.blit(exit_text, (SCREEN_WIDTH // 2 - exit_text.get_width() // 2, SCREEN_HEIGHT - 50))
+
+
+
         
         for event in pygame.event.get():
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_1 : seed.append(1)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_2 : seed.append(2)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_3 : seed.append(3)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_4 : seed.append(4)
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_5 : seed.append(5)
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1786,6 +1937,9 @@ def end_run() :
                 waiting -= 1
         
         update_clock()
+    
+    global seed_input
+    seed_input = str(seed)
 
 
 # VARIABLES POUR LE SHOP :
@@ -1858,7 +2012,6 @@ def memo_shop_receive() :
     selection_locked = False
     from description import generer_message_de_description
     from description import desc_italic_font
-
 
     msg = font.render("Rebienvenu ! Vous vous souvenez bien de tous ?", True, (255, 255, 255))
     msg2 = desc_italic_font.render("Effectuer une paire pour que l'achat vous soit proposé", True, (255, 255, 255))
@@ -2026,7 +2179,7 @@ def do_next() :
             switch_bg_to(BG_COLORS["training"])
             selection_locked = False
             go_training()
-            if random.random() < proposal_after_training_prob :
+            if get_random("proposal_after_training_prob") < proposal_after_training_prob :
                 game["state"] = "proposal_To_play"
             else :
                 game["state"] = "play"
@@ -2087,7 +2240,10 @@ if __name__ == "__main__":
 
 
     start_run(**run_parameter)
+    # apparation_probability["Bubble_Man"]=1
+    # fighters_lvl["Bubble_Man"]=7
     # apparation_probability["Catchy"]=1
     # fighters_lvl["Catchy"]=1
+    # run_seed="m"
     while True :
         do_next()
