@@ -165,6 +165,13 @@ def seed_sample(things, k=1, event_name="generic_sample") :
     random.seed(run_seed)
     return choice
 
+def seed_shuffle(things, event_name="generic_shuffle") :
+    event_id = get_event_id(event_name)
+    random.seed(event_id)
+    random.shuffle(things)
+    random.seed(run_seed)
+
+
 
 
 
@@ -244,7 +251,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     proposal_after_training_prob = p_proposal_after_training
     shop_choices = p_shop_choices
     bonus_lvl_probabilities.clear()
-    bonus_lvl_probabilities.extend([0.3]+[0.2**i for i in range(2,10)])
+    bonus_lvl_probabilities.extend([0.3]+[0.2**i for i in range(1,10)])
 
     scores_constantes_modifiers_plus.clear()
     scores_constantes_modifiers_mult.clear()
@@ -1167,9 +1174,6 @@ class Card:
         self.stack_color_modifiers.append(color)
 
 
-
-
-
 # --- FONCTION DE CREATION DU PLATEAU ---
 def create_board(num_pairs, x, y, width, height,  forced_pairs = None):
     
@@ -1211,7 +1215,7 @@ def create_board(num_pairs, x, y, width, height,  forced_pairs = None):
                         
     
     cards_images = chosen_images * 2
-    random.shuffle(cards_images)
+    seed_shuffle(cards_images)
 
     
     size = round(playing_field.col_size()*0.9)
@@ -2389,7 +2393,7 @@ def memo_shop_receive() :
     cards_upgrade =  2*last_cards_shop
 
     order = [i for i in range(len(last_cards_shop))]
-    random.shuffle(order)
+    seed_shuffle(order)
 
     selection.clear()
     for i,card in enumerate(cards_upgrade) :
@@ -2447,7 +2451,7 @@ def memo_shop_receive() :
                     if card.rect.collidepoint(mouse_pos) and card in selection :
                         card.selected = False
                         selection.remove(card)  
-                    elif card.rect.collidepoint(mouse_pos) and card not in selection and len(selection)<2 :
+                    elif card.rect.collidepoint(mouse_pos) and card not in selection and len(selection)<2 and not card.remove :
                         card.selected = True
                         selection.append(card)
 
@@ -2608,7 +2612,7 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-
+    run_parameter["p_training_choices"] = 2
 
     start_run(**run_parameter)
     # apparation_probability["Bubble_Man"]=1
@@ -2616,6 +2620,7 @@ if __name__ == "__main__":
     # apparation_probability["Catchy"]=1
     # fighters_lvl["Catchy"]=1
     # run_seed="m"
+
 
 
 
