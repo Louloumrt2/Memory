@@ -8,6 +8,12 @@ pygame.init()
 
 # --- CONFIGURATION ---
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
+grids = []
+last_window_size_change= pygame.time.get_ticks()
+
+
+DEBUG_SHOW_GRID = False
+
 
 FPS = 60
 FLIP_SPEED = 10
@@ -71,11 +77,12 @@ UPGRADES_COST = {
 
 
 # --- INITIALISATION ---
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Brutal Memory")
 clock = pygame.time.Clock()
 
 from font import *
+
 
 
 #============================== DATA LOADING ===============================#
@@ -181,6 +188,7 @@ objects_lvl = {}
 level_upgrade_base = 1
 apparation_probability = {}
 player_lives = [20, 0, 0, 0]
+max_player_live = 30
 player_score = [0, 0, 0]
 eclat = [10,0,0]
 regain_PV_manche = 2
@@ -199,7 +207,7 @@ scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
 
 def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3) :
-    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices
+    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live
     
     last_score_change_tick = pygame.time.get_ticks()
     last_live_change_tick = pygame.time.get_ticks()
@@ -220,6 +228,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     apparation_probability.clear()
     player_lives.clear()
     player_lives.extend([start_lives, 0, 0, 0])
+    max_player_live = 30
     player_score.clear()
     player_score.extend([0, 0, 0])
     eclat.clear()
@@ -256,6 +265,319 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     random_event_use.clear()
 
     
+
+#=========================== MOUVEMENT ============================*
+from collections import deque
+class Movement() :
+    def __init__(self, stack_position_memory = 50):
+        
+        self.mode = None 
+        self.enable = False
+        self.ended = False
+        self.stack_memory = stack_position_memory
+
+        # Force effet 
+        self.momentum_x = None
+        self.momentum_y = None 
+        
+        self.gravity = 0 # peut être définit à autre chose que 9.81
+
+        # Straight line or trajectory
+        self.start_time = None 
+        self.start_pause_time = None
+
+        self.duration = None
+        self.coords_start = None # tuple de coords x/y
+        self.coords_end = None 
+        self.speed = None
+        self.actual_coords = None
+        self.previous_coords = deque()
+        self.trajectory = []
+    
+    def set_movement(self, duration = None, speed = None, special_trajectory = None, coords_start = None, coords_end = None) :
+        """Met à jour la trajectoire en fonction des paramètres d'entrée. Plusieurs moyen de définir une trajectoire sont possibles
+        - speed + coords_start + coords_end : déplacement à vitesse déterminé
+        - duration + coords_start + coords_end : déplacement à durée déterminé
+        - Vitesse + special_trajectory : trajectoire à vitesse déterminé
+        - duration + special_trajectory : trajectoire à durée déterminé
+        
+        A l'heure actuelle seul les déplacements sont codés, ni les poursuites, ni les trajectoires, ni la physique"""
+        self.mode, self.trajectory, self.speed, self.duration, self.start_time, self.coords_end, self.coords_start, self.actuel_cords, *self.reste = (None,)*30
+        if speed and coords_start and coords_end :
+            self.type = "move_speed"
+            self.speed = speed
+            self.coords_start = coords_start
+            self.coords_end = coords_end
+            self.actual_coords = coords_start
+            self.previous_coords.append(coords_start)
+        elif duration and coords_start and coords_end :
+            self.type = "move_time"
+            self.duration = duration
+            self.coords_start = coords_start
+            self.coords_end = coords_end
+            self.actual_coords = coords_start
+            self.previous_coords.append(coords_start)
+        elif special_trajectory and speed :
+            self.type = "path_speed"
+            self.trajectory = special_trajectory
+            self.previous_coords.append(special_trajectory[0])
+        elif special_trajectory and duration :
+            self.type = "path_duration"
+            self.trajectory = special_trajectory
+            self.previous_coords.append(special_trajectory[0])
+        else :
+            raise ValueError("Vous avez indiqué des mauvais paramètre pour le mouvement")
+    
+    def start(self):
+        if self.ended : return False
+        if self.start_pause_time :
+            time_in_pause = gtick() - self.start_pause_time
+            self.start_pause_time = 0
+            self.start_time += time_in_pause
+
+        if not self.start_time : self.start_time = gtick()
+        self.enable = True
+
+    def pause(self):
+        self.enable = False
+        self.start_pause_time = gtick() 
+    
+    def end(self) :
+        self.enable = False
+        self.ended = True
+    
+    def restart(self) :
+        self.start_time = 0
+        self.actual_coords = self.coords_start
+        self.start_time = gtick()
+        self.start_pause_time = 0
+        self.enable = True
+    
+    def get_delta(self,from_time = 0) :
+        if not from_time :
+            return (self.actual_coords[0] - self.previous_coords[-1][0], self.actual_coords[1] - self.previous_coords[-1][1])
+        else :
+            raise NotImplemented
+    
+    def get_x(self) :
+        return round(self.actual_coords[0])
+    def get_y(self) :
+        return round(self.actual_coords[1])
+    def get_coords(self) :
+        return (self.get_x(), self.get_y())
+    
+    def change_coords(self,new_cords) :
+        self.previous_coords.append(self.actual_coords)
+        if len(self.previous_coords)>self.stack_memory :
+            self.previous_coords.popleft()
+        self.actual_coords = new_cords
+    
+    def update(self) :
+        if self.enable :
+            match self.type :
+                case "move_speed" :
+                    direction = (self.coords_end[0] - self.actual_coords[0], self.coords_end[1] - self.actual_coords[1])
+                    norm = math.sqrt((direction[0]**2) + (direction[1]**2))
+                    move_norme = (direction[0]/norm, direction[1]/norm)
+                    move_final = ((direction[0],move_norme[0]*self.speed), (direction[1],move_norme[1]*self.speed)) # evite de dépasser
+                    self.change_coords(self.actual_coords[0] + move_final[0], self.actual_coords[1] + move_final[1])
+                    if self.get_coords == self.coords_end :
+                        self.end()
+                case "move_time" :
+                    completion_ratio = borne((gtick() - self.start_time) / self.duration)
+                    self.change_coords((self.coords_start[0]*(1-completion_ratio) + self.coords_end[0]*(completion_ratio), self.coords_start[1]*(1-completion_ratio) + self.coords_end[1]*(completion_ratio)))
+                    if completion_ratio == 1 :
+                        self.end()
+
+#========================= DISPLAYS ==========================#
+class grid() :
+    def __init__(self, corner_left=(0,0), width=0, height=0, from_screen=False, rows = 8, cols = 8, square=False):
+        self.follow_screen = from_screen
+        self.corner_left = from_screen and (0,0) or corner_left
+        self.init_corner_left = from_screen and (0,0) or corner_left
+        self.init_width = width
+        self.init_height = height
+        self.width = from_screen and SCREEN_WIDTH or width
+        self.height = from_screen and SCREEN_HEIGHT or height
+        self.square = square 
+
+        self.rows = rows
+        self.cols = cols
+
+        if self.square :
+            a_square_size = min(self.width/self.cols, self.height/self.rows)
+            self.width, self.height = (a_square_size*self.cols,a_square_size*self.rows)
+
+            init_x, init_y = self.init_corner_left
+
+            x = init_x + round((self.init_width - self.width) / 2)
+            y = init_y + round((self.init_height - self.height) / 2)
+
+            self.corner_left = (x,y)
+        
+
+
+
+        self.top_stack = [None for _ in range(rows)]
+
+        self.save_size = None
+
+        try :
+            grids.append(self)
+        except : pass
+    
+    def ratio_x(self,ratio) :
+        return round(self.corner_left[0] + self.width*ratio) 
+    def ratio_y(self, ratio) :
+        return round(self.corner_left[1] + self.height*ratio)
+    
+    def update_width_height(self,width, height, new_corner = None) :
+        self.init_width = width
+        self.init_height = height
+        self.width = width
+        self.height = height
+        self.corner_left = new_corner
+
+        if self.square :
+            a_square_size = min(self.width/self.cols, self.height/self.rows)
+            self.width, self.height = (a_square_size*self.cols,a_square_size*self.rows)
+
+            if new_corner : self.init_corner_left = new_corner
+            init_x, init_y = self.init_corner_left
+            
+
+            x = init_x + round((self.init_width - self.width) / 2)
+            y = init_y + round((self.init_height - self.height) / 2)
+
+            self.corner_left = (x,y)
+        
+    
+    def min_size(self, nb=1) :
+        return min(self.col_size(nb), self.row_size(nb))
+
+    def coords(self, col, row, marging=0):
+
+        return (
+            round(self.ratio_x(col / self.cols) + marging),
+            round(self.ratio_y(row / self.rows) + marging)
+        )
+
+    
+    def col_size(self, nb=1) :
+        return round(self.width/self.cols*nb)
+    def row_size(self, nb=1) :
+        return round(self.height/self.rows*nb)
+    def size_of(self, nb_cols = 1, nb_rows = 1) :
+        return (round(self.width/self.cols*nb_cols), round(self.height/self.rows*nb_rows))
+    
+    def create_rect_info(self, col, row, nb_col=1, nb_row=1, marging=0) :
+        x, y = self.coords(col, row)
+
+        width, height = self.size_of(nb_col, nb_row)
+
+        width -= 2*marging
+        height -= 2*marging 
+
+        return (x,y,width, height)
+    
+    def create_rect(self, col, row, nb_col=1, nb_row=1, marging=0) -> pygame.Rect :
+        a =  pygame.Rect(self.create_rect_info(col, row, nb_col, nb_row, marging))
+        return a
+    
+    def my_rect_info(self, marging = 0) :
+        return (*self.corner_left, self.width - 2*marging, self.height - 2*marging)
+    
+    def my_rect(self, marging = 0) -> pygame.Rect :
+        return pygame.Rect(self.my_rect_info(marging))
+    
+    def all_grid_infos(self,marging=0, col_interval = None, row_interval=None) :
+        if not col_interval : col_interval = (0, self.cols-1)
+        if not row_interval : row_interval = (0, self.rows-1)
+
+
+        grid = []
+        for row in range(row_interval[0], row_interval[1]+1) :
+            a_row = []
+            grid.append(a_row)
+            for col in range(col_interval[0], col_interval[1]+1):
+                a_row.append(self.create_rect_info(col, row, marging=marging))
+        return grid
+    
+    def all_grid_rect(self,marging=0, col_interval = None, row_interval=None) :
+        if not col_interval : col_interval = (0, self.cols-1)
+        if not row_interval : row_interval = (0, self.rows-1)
+
+
+        grid = []
+        for row in range(row_interval[0], row_interval[1]+1) :
+            a_row = []
+            grid.append(a_row)
+            for col in range(col_interval[0], col_interval[1]+1):
+                a_row.append(self.create_rect(col, row, marging=marging))
+        return grid
+    
+    def duplicate(self, marging=0) :
+        a,b,c,d = self.my_rect_info(marging=marging)
+        return grid((a,b),c,d,self.rows, self.cols)
+
+    def update_from_screen(self) :
+        if self.follow_screen :
+            self.width = SCREEN_WIDTH
+            self.height = SCREEN_HEIGHT
+    
+    def save_size(self) :
+        self.save_size = (self.width, self.height)
+
+    def add_from_top(self, e,  element_height = 1, element_width=1, col=None, marging=0) :
+        if col == None : col=self.cols/2
+        # Trouver la premiere place dispo :
+        try :
+            dispo = next(row for row in range(self.rows) if all(self.top_stack[i] is None for i in range(row, row+element_height)))
+        except StopIteration :
+            return False 
+        
+        self.top_stack[dispo:dispo+element_height] = e
+        return self.create_rect_info(dispo,col, element_width, element_height, marging )
+    
+    def draw(self, surface, epaisseur=1, color=(0,0,0)):
+
+        # if self.square :
+        #     x,y,w,h = self.my_rect_info()
+        #     xi, yi = self.init_corner_left
+        #     wi, hi = self.init_width, self.init_height
+        #     self.update_width_height(wi,hi,(xi,yi))
+        #     self.square = False
+        #     self.draw(surface, epaisseur, color=tuple((255-i) for i in color))
+        #     self.update_width_height(w,h,(x,y))
+        #     self.square = True
+
+
+
+        # lignes horizontales
+        for row in range(self.rows + 1):
+            y = self.corner_left[1] + int(row * self.height / self.rows)
+            pygame.draw.rect(surface, color,
+                            pygame.Rect(self.corner_left[0],
+                                        y - epaisseur,
+                                        self.width,
+                                        2 * epaisseur))
+
+        # lignes verticales
+        for col in range(self.cols + 1):
+            x = self.corner_left[0] + int(col * self.width / self.cols)
+            pygame.draw.rect(surface, color,
+                            pygame.Rect(x - epaisseur,
+                                        self.corner_left[1],
+                                        2 * epaisseur,
+                                     self.height))
+        
+
+
+    
+
+
+global_grid = grid(from_screen=True, rows=10, cols=10)
+
 
 
 
@@ -407,6 +729,7 @@ class Card:
         self.init_x, self.init_y = x,y
         self.name = name
         self.init_size = size
+        self.init_image = image
         self.image = pygame.transform.smoothscale(image, (size, size))
         self.color = color
         self.stack_color_modifiers = []
@@ -421,6 +744,8 @@ class Card:
         self.selected = False
         self.bigger_selected_progress = 0
 
+        self.boncing = 0
+
         self.dziit_progress = 0
         self.dziited = False
         self.englued = False
@@ -429,6 +754,7 @@ class Card:
         self.col = 0
 
         self.location = location
+        self.tick_appear = gtick()
 
         self.character_copied = [] # pour fantome a cheveux
     
@@ -464,6 +790,7 @@ class Card:
 
         self.y = self.init_y - (self.rect.height - self.init_size) / 2
         if self.location == "proposal" : self.y += BONCE_EFFECT_INTENSITY * math.cos((gtick() - self.tick_appear) / BONCE_EFFECT_TIME)
+        if self.location == "training" : self.y += self.boncing * math.cos((gtick() - self.tick_appear) / BONCE_EFFECT_TIME)
         # keep the rect's topleft in sync with the visible position (use integers)
 
         self.rect.topleft = (int(self.x), int(self.y))
@@ -606,9 +933,7 @@ class Card:
                 
                 case "Fantome_A_Cheveux" :
                     if not custom_name :
-                        print("On rentre dans le no_custom_name")
                         for copied_ability in self.character_copied :
-                            print("On copie l'ability de ",copied_ability)
                             self.activate_effect(nb_match, selection, lesnoms, cards, min(fighters_lvl.get("Fantome_A_Cheveux",1), fighters_lvl.get(copied_ability,1)),already_done, nb_move, custom_name=copied_ability)
                 
                 case "Catchy" :
@@ -634,6 +959,26 @@ class Card:
                             try_put = card.put_tag(("englue",lvl,(255,190,210)))
                             if try_put : cards_bubbled.append(card)
                     if cards_bubbled : pop_up(cards_bubbled, "Englué !", cards, message_color=(255,190,210),font=pop_up_font)
+
+                    if lvl >= 4 and nb_match>0 and not "Bubble_Man" in already_done:
+                        bb_cards = []
+                        for card in selection :
+                            if card != self and ca_match(card, self) :
+                                bb_cards.append(card) 
+                        cartes_englues = []
+                        for bb in [self]+bb_cards :
+                            for card in not_removed_cards(cards) :
+                                if card != bb and est_adjacent(bb, card, 1) :
+                                    cartes_englues.append(card)
+                        if cartes_englues :
+                            card_success = []
+                            for card in cartes_englues :
+                                try_put = card.put_tag(("englue", lvl+2, (255,190,210)))
+                                if try_put : card_success.append(card)
+                            if card_success :
+                                pop_up(card_success, "Englué !", cards, (255,100,100))
+                        already_done.append("Bubble_Man")
+                        
 
 
 
@@ -672,7 +1017,10 @@ class Card:
             pop_up(cible_effect, "Ici !", cards, (255,255,255), pop_up_font, time=600)
         
 
-                
+    def change_size_cords(self, new_size, x, y) :
+        self.init_x = x 
+        self.init_y = y
+        self.init_size = new_size
 
         
     def check_modification(self, nb_move) :
@@ -687,7 +1035,8 @@ class Card:
 
         
         self.tags |= added_tag
-        self.tags -= removed_tags
+        for tag in removed_tags :
+            self.delete_tag(tag)
         
                     
 
@@ -822,8 +1171,14 @@ class Card:
 
 
 # --- FONCTION DE CREATION DU PLATEAU ---
-def create_board(num_pairs, forced_pairs = None):
+def create_board(num_pairs, x, y, width, height,  forced_pairs = None):
+    
+
     total_cards = num_pairs * 2
+
+    cols = int(math.sqrt(total_cards))
+    rows = math.ceil(total_cards / cols)
+    playing_field = grid((x,y), width, height, cols=cols, rows=rows,square=True)
 
     chosen_images = seed_sample(all_images, num_pairs)
     if (lvl := objects_lvl.get('Ghosting',0)) :
@@ -858,14 +1213,13 @@ def create_board(num_pairs, forced_pairs = None):
     cards_images = chosen_images * 2
     random.shuffle(cards_images)
 
-    cols = int(math.sqrt(total_cards))
-    rows = math.ceil(total_cards / cols)
-    size = min(SCREEN_WIDTH // (cols + 1), SCREEN_HEIGHT // (rows + 1))
+    
+    size = round(playing_field.col_size()*0.9)
+    margin = round(playing_field.col_size()*0.05)
 
     cards = []
     for i in range(total_cards):
-        x = (i % cols) * (size + 10) + 150
-        y = (i // cols) * (size + 10) + 90
+        x,y = playing_field.coords(i%cols, i//cols, marging=margin)
         color = (255,150,150)
         cards.append(card := Card(x, y, cards_images[i][0], cards_images[i][1], color, size))
         card.row = i // cols
@@ -873,7 +1227,7 @@ def create_board(num_pairs, forced_pairs = None):
 
         # # FOR TEST
         # card.tags.add(("michel",3))
-    return cards
+    return playing_field, cards, cols, rows
 
 
 def update_draw_cards(cards) :
@@ -925,7 +1279,8 @@ def update_draw_score(score = player_score, lives = player_lives) :
         
         
         life_display = math.ceil(lives[0] - lives[1] - lives[2])
-        life_text = font.render(f"Vies : {life_display} {'+ '+str(math.floor(lives[1])) if lives[1] else ''} {'- '+str(abs(math.floor(lives[2]))) if lives[2] else ''} {'['+str(abs(math.floor(lives[3])))+']' if lives[3]<0 else '' }", True, get_color_life(lives[1], lives[2], lives[3]))
+        max_atteint = life_display==max_player_live
+        life_text = font.render(f"Vies : {life_display}{'/'+str(max_player_live) if max_atteint else ''} {'+ '+str(math.floor(lives[1])) if lives[1] else ''} {'- '+str(abs(math.floor(lives[2]))) if lives[2] else ''} {'['+str(abs(math.floor(lives[3])))+']' if lives[3]<0 else '' }", True, get_color_life(lives[1], lives[2], lives[3]))
 
 
 
@@ -1014,8 +1369,10 @@ def add_lives(ch, extra_var=None) :
     if (lvl_chat_comp := objects_lvl.get("Chat_De_Compagnie",0)) and ch>0 : 
         if get_random("chat_de_compagnie") < (lvl_chat_comp / lvl_chat_comp+4) : ch += 1
         add_show_effect("Chat_De_Compagnie")
-        
+    
     player_lives[0] += ch
+    if player_lives[0]>max_player_live :
+        player_lives[0] = max_player_live
     if ch>=0 :
         player_lives[1] += ch
     else :
@@ -1030,7 +1387,7 @@ hyper_blend_constant = 0
 blend_var = 1
 hyper_blend_var = 1
 BLEND_VAR_SPEED = 100
-HYPER_BLEND_VAR_SPED = 400
+HYPER_BLEND_VAR_SPED = 20
 
 def update_clock(waiting = 0) :
     
@@ -1044,7 +1401,7 @@ def update_clock(waiting = 0) :
             blend_constant = 0
             blend_var *= -1
 
-        global hyper_blend_constant, hyper_blend_var
+        global hyper_blend_constant, hyper_blend_var, omega_blend_constant
 
         hyper_blend_constant += hyper_blend_var/HYPER_BLEND_VAR_SPED
         if hyper_blend_constant >= 1 :
@@ -1053,6 +1410,7 @@ def update_clock(waiting = 0) :
         elif hyper_blend_constant <= 0 :
             hyper_blend_constant = 0
             hyper_blend_var *= -1
+        
 
         ## On va représenter tout ce qui doit être présent dans ton contexte (passe au dessus)
         show_effects(screen)
@@ -1063,6 +1421,10 @@ def update_clock(waiting = 0) :
 
         update_draw_eclats(fading = ratio_fading)
 
+        if DEBUG_SHOW_GRID :
+            for i,grid in enumerate(grids) :
+                grid.draw(screen,color=(120*i%255, 10*i%255, 40*i%255))
+        
         pygame.display.flip()
         clock.tick(FPS)
 
@@ -1076,8 +1438,10 @@ def update_clock(waiting = 0) :
         else :
             accelere = 0
 
+        
+        
 
-            
+
         if awaiting_time > 0 :
             awaiting_time -= 1
             if awaiting_time < 0 : awaiting_time = 0
@@ -1189,6 +1553,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 update_clock()
 
                 for event in pygame.event.get():
+                    check_resize(event)
                     if event.type == pygame.QUIT:
                         pygame.quit()
                         sys.exit()
@@ -1201,6 +1566,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
             
             while not all(card.flip_progress==0 for card in cards) :
                 for event in pygame.event.get():
+                    check_resize(event)
                     acceleration(event)
                 draw_bg()
                 show_message(message, message_color, recenterx=False)
@@ -1280,18 +1646,43 @@ def wait_with_cards(cards,time) :
 
 def wait_finish_return(cards):
     # Attendre tant qu'il y a au moins une carte en cours d'animation (0 < progress < 1)
-    while any((card.flip_progress!=1 and card.flipped) or (card.flip_progress!=0 and not card.flipped) for card in cards):
+    while any(((card.flip_progress!=1 and card.flipped) or (card.flip_progress!=0 and not card.flipped)) and not card.remove for card in cards):
         for event in pygame.event.get() :
+            check_resize(event)
             acceleration(event)
         draw_bg()
         update_draw_cards(cards)
         update_draw_score(player_score, player_lives)
         update_clock()
 
+def get_end_of_round_eclat(cards):
+    return 3+int(1.5*game["round"])
+
+def check_resize(event) :
+    if event.type == pygame.VIDEORESIZE:
+        global screen
+        screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+        global SCREEN_HEIGHT, SCREEN_WIDTH
+        SCREEN_HEIGHT = event.h
+        SCREEN_WIDTH = event.w
+        for grid in grids :
+            grid.update_from_screen()
+        
+        global last_window_size_change
+        last_window_size_change = gtick()
+
+
+
+
+
 # --- JEU PRINCIPAL ---
 def play_memory(num_pairs=8, forced_cards = None):
     global selection_locked, move, last_succeed_move, combo
-    cards = create_board(num_pairs, forced_cards)
+    cards : list["Card"]
+
+    bords = SCREEN_WIDTH//8, SCREEN_HEIGHT//8
+    taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+    playing_field, cards, cols, rows = create_board(num_pairs,bords[0],bords[1],taille,taille,forced_pairs=forced_cards)
     player_score[0]
     last_selection_time = 0
     running = True
@@ -1299,12 +1690,39 @@ def play_memory(num_pairs=8, forced_cards = None):
     ending = 0
     move = 1
 
+    last_window_changed_local = gtick()
+
     while running:
+
+        # if last_window_size_change > last_window_changed_local :
+
+        #     for card in cards :
+        #         cards.change
+
+
+
         draw_bg()
+        
 
         # événements
         for event in pygame.event.get():
             acceleration(event)
+            check_resize(event)
+
+            if event.type == pygame.VIDEORESIZE :
+                print("a")
+                bords = SCREEN_WIDTH//8, SCREEN_HEIGHT//8
+                print(bords)
+                taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+                playing_field.update_width_height(taille, taille, new_corner=(bords[0], bords[1]))
+                print(playing_field.my_rect_info())
+
+                size = round(playing_field.col_size()*0.9)
+                margin = round(playing_field.col_size()*0.05)
+                for card in cards :
+                    card.change_size_cords(size, *playing_field.coords(card.col, card.row, marging=margin))
+
+            
 
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -1347,7 +1765,8 @@ def play_memory(num_pairs=8, forced_cards = None):
                                 selection.append(card)
                                 card.flipped = True
                                 last_selection_time = pygame.time.get_ticks()
-                        
+        
+         
 
         # mise à jour
         for card in cards:
@@ -1424,13 +1843,14 @@ def play_memory(num_pairs=8, forced_cards = None):
         if all(c.remove for c in cards) and player_lives[0] > 0:
             
             update_draw_score(player_score, player_lives)
-            end_text = font.render(f"Grille finite ! Eclats Gagnés : {game['round']*3}", True, (255, 255, 0))
+            gain_eclat = get_end_of_round_eclat(cards)
+            end_text = font.render(f"Grille finite ! Eclats Gagnés : {gain_eclat}", True, (255, 255, 0))
             screen.blit(end_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
             end_text2 = font.render(f"PV regagné : {regain_PV_manche}", True, (255,150,150))
             screen.blit(end_text2, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + end_text.get_height()+5))
             if not ending :
                 add_score("end_play")
-                add_eclat(game['round']*3)
+                add_eclat(gain_eclat)
                 add_lives(regain_PV_manche)
             ending = True
 
@@ -1477,7 +1897,6 @@ def proposal(card_name) :
         250,
         location="proposal"
     )
-    card_display.tick_appear = gtick()
 
     card_display.flipped = True
 
@@ -1510,6 +1929,7 @@ def proposal(card_name) :
         # update_draw_score(player_score, player_lives)
   
         for event in pygame.event.get():
+            check_resize(event)
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1550,129 +1970,6 @@ def get_bonus_lvl(name) :
     nb = get_random("bonus_lvl")
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
 
-from collections import deque
-class Movement() :
-    def __init__(self, stack_position_memory = 50):
-        
-        self.mode = None 
-        self.enable = False
-        self.ended = False
-        self.stack_memory = stack_position_memory
-
-        # Force effet 
-        self.momentum_x = None
-        self.momentum_y = None 
-        
-        self.gravity = 0 # peut être définit à autre chose que 9.81
-
-        # Straight line or trajectory
-        self.start_time = None 
-        self.start_pause_time = None
-
-        self.duration = None
-        self.coords_start = None # tuple de coords x/y
-        self.coords_end = None 
-        self.speed = None
-        self.actual_coords = None
-        self.previous_coords = deque()
-        self.trajectory = []
-    
-    def set_movement(self, duration = None, speed = None, special_trajectory = None, coords_start = None, coords_end = None) :
-        """Met à jour la trajectoire en fonction des paramètres d'entrée. Plusieurs moyen de définir une trajectoire sont possibles
-        - speed + coords_start + coords_end : déplacement à vitesse déterminé
-        - duration + coords_start + coords_end : déplacement à durée déterminé
-        - Vitesse + special_trajectory : trajectoire à vitesse déterminé
-        - duration + special_trajectory : trajectoire à durée déterminé
-        
-        A l'heure actuelle seul les déplacements sont codés, ni les poursuites, ni les trajectoires, ni la physique"""
-        self.mode, self.trajectory, self.speed, self.duration, self.start_time, self.coords_end, self.coords_start, self.actuel_cords, *self.reste = (None,)*30
-        if speed and coords_start and coords_end :
-            self.type = "move_speed"
-            self.speed = speed
-            self.coords_start = coords_start
-            self.coords_end = coords_end
-            self.actual_coords = coords_start
-            self.previous_coords.append(coords_start)
-        elif duration and coords_start and coords_end :
-            self.type = "move_time"
-            self.duration = duration
-            self.coords_start = coords_start
-            self.coords_end = coords_end
-            self.actual_coords = coords_start
-            self.previous_coords.append(coords_start)
-        elif special_trajectory and speed :
-            self.type = "path_speed"
-            self.trajectory = special_trajectory
-            self.previous_coords.append(special_trajectory[0])
-        elif special_trajectory and duration :
-            self.type = "path_duration"
-            self.trajectory = special_trajectory
-            self.previous_coords.append(special_trajectory[0])
-        else :
-            raise ValueError("Vous avez indiqué des mauvais paramètre pour le mouvement")
-    
-    def start(self):
-        if self.ended : return False
-        if self.start_pause_time :
-            time_in_pause = gtick() - self.start_pause_time
-            self.start_pause_time = 0
-            self.start_time += time_in_pause
-
-        if not self.start_time : self.start_time = gtick()
-        self.enable = True
-
-    def pause(self):
-        self.enable = False
-        self.start_pause_time = gtick() 
-    
-    def end(self) :
-        self.enable = False
-        self.ended = True
-    
-    def restart(self) :
-        self.start_time = 0
-        self.actual_coords = self.coords_start
-        self.start_time = gtick()
-        self.start_pause_time = 0
-        self.enable = True
-    
-    def get_delta(self,from_time = 0) :
-        if not from_time :
-            return (self.actual_coords[0] - self.previous_coords[-1][0], self.actual_coords[1] - self.previous_coords[-1][1])
-        else :
-            raise NotImplemented
-    
-    def get_x(self) :
-        return round(self.actual_coords[0])
-    def get_y(self) :
-        return round(self.actual_coords[1])
-    def get_coords(self) :
-        return (self.get_x(), self.get_y())
-    
-    def change_coords(self,new_cords) :
-        self.previous_coords.append(self.actual_coords)
-        if len(self.previous_coords)>self.stack_memory :
-            self.previous_coords.popleft()
-        self.actual_coords = new_cords
-    
-    def update(self) :
-        if self.enable :
-            match self.type :
-                case "move_speed" :
-                    direction = (self.coords_end[0] - self.actual_coords[0], self.coords_end[1] - self.actual_coords[1])
-                    norm = math.sqrt((direction[0]**2) + (direction[1]**2))
-                    move_norme = (direction[0]/norm, direction[1]/norm)
-                    move_final = ((direction[0],move_norme[0]*self.speed), (direction[1],move_norme[1]*self.speed)) # evite de dépasser
-                    self.change_coords(self.actual_coords[0] + move_final[0], self.actual_coords[1] + move_final[1])
-                    if self.get_coords == self.coords_end :
-                        self.end()
-                case "move_time" :
-                    completion_ratio = borne((gtick() - self.start_time) / self.duration)
-                    self.change_coords((self.coords_start[0]*(1-completion_ratio) + self.coords_end[0]*(completion_ratio), self.coords_start[1]*(1-completion_ratio) + self.coords_end[1]*(completion_ratio)))
-                    if completion_ratio == 1 :
-                        self.end()
-    
-
 
 
 
@@ -1701,8 +1998,6 @@ def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, me
     switch2 = Movement()
     coords_1 = (card1.init_x, card1.init_y)
     coords_2 = (card2.init_x, card2.init_y)
-    print("c1",coords_1)
-    print("c2",coords_2)
     switch1.set_movement(duration=time, coords_start=coords_1, coords_end=coords_2)
     switch2.set_movement(duration=time, coords_start=coords_2, coords_end=coords_1)
     switch1.start(), switch2.start()
@@ -1725,6 +2020,42 @@ def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, me
 
     return True
 
+def find_font_size_msg(message, width, height, initial_font_size=10, police=font_police,
+                       bold=False, italic=False):
+
+    font_size = initial_font_size
+
+    # Fonction interne pour calculer les dimensions du texte
+    def get_size(fs):
+        font = pygame.font.SysFont(police, fs, bold=bold, italic=italic)
+        msg = font.render(message, False, (0, 0, 0))
+        return msg.get_width(), msg.get_height()
+
+    w, h = get_size(font_size)
+
+
+    # Tant que ça rentre, on augmente
+    while w < width and h < height:
+        font_size += 1
+        w, h = get_size(font_size)
+
+    # On a dépassé → on redescend d’un cran
+    font_size -= 1
+    w, h = get_size(font_size)
+
+    # Si jamais on dépasse encore, on ajuste vers le bas
+    while (w > width or h > height) and font_size > 1:
+        font_size -= 1
+        w, h = get_size(font_size)
+
+    return max(font_size, 1)
+
+
+def create_optimal_msg(message, width, height, initial_font_size = 10, police=font_police, bold=False, italic=False, color=(0,0,0), antialias = True) :
+    font = pygame.font.SysFont(police, find_font_size_msg(message,width,height, initial_font_size, police, bold, italic), bold=bold, italic=italic)
+    return font.render(message, antialias, color)
+
+from pygame import Rect
 
 def go_training() :
     # Nettoie l'écran et affiche un écran "fresh" en attendant une action de l'utilisateur
@@ -1733,34 +2064,72 @@ def go_training() :
     selection_locked = False
     from description import generer_message_de_description
 
+    training_grid = grid(from_screen=True,rows=8, cols=8)
 
-    msg = font.render("C'est l'heure de l'entrainement ! Mais qui entrainer ?", True, (255, 255, 255))
     cards_upgrade = seed_sample([card for card in all_images if UPGRADES_COST.get(card[0])],training_choices, event_name="training_choices")
-    displayer = pygame.Rect(SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 3)
-    card_size = min((displayer.width - (training_choices + 1) * 20) // training_choices, displayer.height - 20)
     all_cards : list[Card] = []
-
     updrade_lvl = {c : get_bonus_lvl(c) for c,_ in cards_upgrade}
-    
-
 
     for name, image in cards_upgrade :
-        x = displayer.x + 20 + len(all_cards) * (card_size + 20)
-        y = displayer.y + (displayer.height - card_size) // 2
-        all_cards.append(Card(x, y, name, image, (150, 150, 255), card_size, location="training"))
-        all_cards[-1].flipped = True
+            all_cards.append(Card(0, 0, name, image, (150, 150, 255), 100, location="training"))
+            all_cards[-1].flipped = True
 
     show_previous_progress = 0
     waiting = True
     ending = False 
     ending_last_time_out = 0
+
+    last_msg_generated_tick = -1
+
     while waiting:
         refresh()
-
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
-
         
-        pygame.draw.rect(screen, blend_multi(((230,200,130), (180,70,160),(120,95,200)), blend_constant), displayer, border_radius=10)
+        if last_window_size_change > last_msg_generated_tick :
+            # creation du message
+            titre_zone = training_grid.create_rect(1,0,6,2)
+            msg = create_optimal_msg("C'est l'heure de l'entrainement ! Mais qui entrainer ?", width=titre_zone.width, height=titre_zone.height, bold=True, color=(255, 255, 255))
+            msgx,msgy = titre_zone.centerx - msg.get_width()/2,titre_zone.centery- msg.get_height()/2
+            # Creation du displayer de cartes
+            d_w, d_h = 6, 4
+            displayer = training_grid.create_rect(1,2,d_w,d_h)
+            
+            displayer_grid = grid(training_grid.coords(1,2), *training_grid.size_of(d_w,d_h), rows=1, cols=training_choices)
+            displayers : list[Rect] = displayer_grid.all_grid_rect()[0]
+            card_size = min(displayer_grid.col_size(), displayer_grid.row_size()) - 20
+            
+            # Création des cartes en elle
+            for i in range(len(all_cards)) :
+                flip_before = all_cards[i].flip_progress
+                x,y=displayer_grid.coords(i,0)
+                x+=10 ; y+=10
+                all_cards[i] = Card(x,y + ((displayer_grid.row_size()-10)//2) - (card_size//2),name=all_cards[i].name, image=all_images_dict[all_cards[i].name], color=all_cards[i].color, size = card_size, location="training")
+                all_cards[i].flipped = True
+                all_cards[i].flip_progress = flip_before
+                all_cards[i].boncing = ((displayer_grid.row_size()-10)//2) - (card_size//2)
+                all_cards[i].tick_appear -= i*(1000//training_choices)
+            
+            description_zone = training_grid.create_rect(1,6,6,3)
+            
+            last_msg_generated_tick = gtick()
+        
+        mouse_pos = pygame.mouse.get_pos()
+
+        #training_grid.draw(screen)
+        #displayer_grid.draw(screen, 1, (255,0,0))
+        screen.blit(msg, (msgx,msgy))
+        for i, disp in enumerate(displayers) :
+            if disp.collidepoint(mouse_pos) :
+
+                if (lvl := updrade_lvl.get(all_cards[i].name,1))>1 :
+                    pygame.draw.rect(screen, blend_multi(((230,200,130), (180,70,160),(120,95,200)), hyper_blend_constant), disp, border_radius=10)
+                else :
+                    pygame.draw.rect(screen, blend_multi(((230,200,130), (180,70,160),(120,95,200)), blend_constant), disp, border_radius=10)
+            else :
+                if (lvl := updrade_lvl.get(all_cards[i].name,1))>1 :
+                    pygame.draw.rect(screen, blend((50,50,50),blend_multi(((230,200,130), (180,70,160),(120,95,200)), hyper_blend_constant),0.3), disp, border_radius=10)
+                else :
+                    pygame.draw.rect(screen, blend((50,50,50),blend_multi(((230,200,130), (180,70,160),(120,95,200)), blend_constant),0.2), disp, border_radius=10)
+            pygame.draw.rect(screen, (0,0,0), disp, width=1, border_radius=10)
         update_draw_cards(all_cards)
         # Afficher les éclats en haut à droite
         update_draw_eclats()
@@ -1768,22 +2137,22 @@ def go_training() :
 
         
         # Détecter le passage de souris sur une carte
-        mouse_pos = pygame.mouse.get_pos()
-        for card in all_cards:
-            if card.rect.collidepoint(mouse_pos) and card.flip_progress>=0.5 and not ending:
+        
+        for i,card in enumerate(all_cards):
+            if displayers[i].collidepoint(mouse_pos) and card.flip_progress>=0.5 and not ending:
                 lvl = fighters_lvl.get(card.name,0)
                 description_surface = generer_message_de_description(
                     {"nom": card.name, "lvl":lvl+updrade_lvl[card.name],"lvl_init": lvl, "prix":UPGRADES_COST.get(card.name, 0)*(lvl+1)},
-                    width=SCREEN_WIDTH - 20,
-                    height=SCREEN_HEIGHT - displayer.height - 80
+                    width=description_zone.width-4,
+                    height=description_zone.height-4
                 )
 
                 description_surface_previous = None
                 if lvl >= 1 and show_previous_progress>0:
                     description_surface_previous = generer_message_de_description(
                         {"nom": card.name, "lvl":lvl, "show_previous":lvl, "lvl_init": lvl, "prix":UPGRADES_COST.get(card.name, 0)*(lvl+1)},
-                        width=SCREEN_WIDTH - 20,
-                        height=SCREEN_HEIGHT - displayer.height - 80
+                        width=description_zone.width-4,
+                        height=description_zone.height-4
                     )
 
                 if description_surface:
@@ -1798,22 +2167,20 @@ def go_training() :
 
                         w_prev, h_prev = surf_prev.get_size()
                         w_curr, h_curr = surf_curr.get_size()
-                        max_w = max(w_prev, w_curr)
-                        max_h = max(h_prev, h_curr)
 
                         # appliquer l'alpha (0-255)
                         surf_prev.set_alpha(int(255 * alpha_prev))
                         surf_curr.set_alpha(int(255 * alpha_curr))
 
                         # fond noir derrière les descriptions
-                        pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(8, SCREEN_HEIGHT - max_h - 9, max_w+3, max_h+3), border_radius=2)
+                        pygame.draw.rect(screen, (0, 0, 0), description_zone, border_radius=2)
 
                         # blit : previous (plus opaque) puis current (plus transparent)
-                        screen.blit(surf_prev, (10, SCREEN_HEIGHT - h_prev - 10))
-                        screen.blit(surf_curr, (10, SCREEN_HEIGHT - h_curr - 10))
+                        screen.blit(surf_prev, (description_zone.left + 2, description_zone.top + 2))
+                        screen.blit(surf_curr, (description_zone.left+ 2, description_zone.top+ 2))
                     else :
-                        pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(8, SCREEN_HEIGHT - 9 - description_surface.get_height(), description_surface.get_width()+3, description_surface.get_height()+3), border_radius=2)
-                        screen.blit(description_surface, (10, SCREEN_HEIGHT - description_surface.get_height() - 10))
+                        pygame.draw.rect(screen, (0, 0, 0), description_zone, border_radius=2)
+                        screen.blit(description_surface, (description_zone.left+ 2, description_zone.top+ 2))
 
                 break
 
@@ -1823,6 +2190,7 @@ def go_training() :
                 show_previous_progress = max(0,show_previous_progress-SHOW_PREVIOUS_SPEED)
         
         for event in pygame.event.get():
+            check_resize(event)
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -1830,21 +2198,18 @@ def go_training() :
                 waiting = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_r :
                 cards_upgrade = seed_sample(all_images,training_choices, event_name="training")
-                displayer = pygame.Rect(SCREEN_WIDTH // 4, SCREEN_HEIGHT // 4, SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-                card_size = min((displayer.width - (training_choices + 1) * 20) // training_choices, displayer.height - 100)
                 all_cards = []
                 for name, image in cards_upgrade :
-                    x = displayer.x + 20 + len(all_cards) * (card_size + 20)
-                    y = displayer.y + (displayer.height - card_size) // 2
-                    all_cards.append(Card(x, y, name, image, (150, 150, 255), card_size, location="training"))
+                    all_cards.append(Card(0, 0, name, image, (150, 150, 255), card_size, location="training"))
                     all_cards[-1].flipped = True
                     updrade_lvl.clear()
                     updrade_lvl.update({c : get_bonus_lvl(c) for c,_ in cards_upgrade})
+                    last_msg_generated_tick = 0
                 
             elif event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
                 mouse_pos = event.pos
-                for card in all_cards:
-                    if card.rect.collidepoint(mouse_pos) and UPGRADES_COST.get(card.name) is not None :
+                for i,card in enumerate(all_cards):
+                    if displayers[i].collidepoint(mouse_pos) and UPGRADES_COST.get(card.name) is not None :
                         cost = UPGRADES_COST.get(card.name, 0) * (fighters_lvl.get(card.name, 0) + 1)
                         if eclat[0] >= cost:
                             add_eclat(-cost)
@@ -1863,7 +2228,7 @@ def go_training() :
                 if pygame.time.get_ticks() - ending_last_time_out > 300 :
                     waiting = False
 
-        update_clock()
+        if last_msg_generated_tick : update_clock()
 
 
 
@@ -1890,6 +2255,7 @@ def end_run() :
             final_score_text_best = desc_italic_font.render(f"Meilleur score !", True, (255, 255, 0))
             screen.blit(final_score_text_best, (SCREEN_WIDTH // 2 - final_score_text.get_width() // 2, 50 + final_score_text.get_height()+5))
             y_offset += final_score_text_best.get_height() + 10
+            best_score = player_score[0]
         
         # Display remaining eclats
         eclat_text = font.render(f"Éclats Restants : {eclat[0]} | Manche : {game["round"]}", True, (255, 200, 100))
@@ -1925,6 +2291,7 @@ def end_run() :
 
         
         for event in pygame.event.get():
+            check_resize(event)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_1 : seed.append(1)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_2 : seed.append(2)
             if event.type == pygame.KEYDOWN and event.key == pygame.K_3 : seed.append(3)
@@ -1946,14 +2313,13 @@ def end_run() :
 last_cards_shop = []
 
 def memo_shop_present():
-    cards_images = random.sample(all_objects_images,shop_choices)
+    cards_images = seed_sample(all_objects_images,shop_choices, event_name="memo_shop_present")
     
     last_cards_shop.clear()
 
-    all_x = (20+((SCREEN_WIDTH-40)//shop_choices)*i for i in range(shop_choices))
     for i,card_image in enumerate(cards_images) :
         card_name, card_im = card_image
-        card = Card(next(all_x), SCREEN_HEIGHT//2, card_name, card_im, (230,230,20), 200, "shop")
+        card = Card(*global_grid.coords(2+3*i, 5), card_name, card_im, (230,230,20), global_grid.min_size()*2, "shop")
         card.flipped = True
         card.flip_progress = 1
         last_cards_shop.append(card)
@@ -1963,7 +2329,7 @@ def memo_shop_present():
     previewed_card = None
     while waiting :
         refresh()
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
+        screen.blit(msg, (global_grid.coords(2,2)))
         
         update_draw_cards(last_cards_shop)
         
@@ -1978,6 +2344,10 @@ def memo_shop_present():
                 previewed_card.selected = True
         
         for event in pygame.event.get():
+            check_resize(event)
+            if event.type == pygame.VIDEORESIZE :
+                for card in last_cards_shop :
+                    card.change_size_cords(global_grid.min_size(),*global_grid.coords(2+3*i, 5))
             if event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
                 waiting = False
             elif event.type == pygame.QUIT:
@@ -2067,6 +2437,7 @@ def memo_shop_receive() :
                 break
 
         for event in pygame.event.get():
+            check_resize(event)
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()    
@@ -2245,5 +2616,8 @@ if __name__ == "__main__":
     # apparation_probability["Catchy"]=1
     # fighters_lvl["Catchy"]=1
     # run_seed="m"
+
+
+
     while True :
         do_next()

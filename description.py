@@ -1,5 +1,5 @@
 import pygame
-from font import desc_font, desc_italic_font
+from font import desc_font, desc_italic_font, font_police
 import math
 
 
@@ -25,6 +25,14 @@ lvll = lambda args : args.get('lvl',1)
 romainlvl = lambda args : (romain(lvll(args)), False)
 romainlvldesc = lambda args : (romain(lvll(args)), True)
 
+
+
+
+
+
+
+
+
 upgrades = {
     "8_Volt" : ("Quand elle est jouée, elle fait vibrer les autres 8-Volt sur un rayon de ", lambda args: (args.get('lvl', 1),False), " autour d'elle"),
     "Michel" : ("Applique la marque michel aux cartes jouées avec lui.","","[sub]michel : pour chaque carte adjacente, vous avez ", lambda args: (args.get('lvl', 1), True), "[sub] chance sur ",lambda args: (args.get('lvl', 1) + 3, True),"[sub] de la réveller pour 0.4 + ", lambda args: (args.get('lvl', 1) * 0.15,True), "[sub] secondes"),
@@ -34,7 +42,7 @@ upgrades = {
     "Lame_Sadique" : ("Effectuer un match offre ", lambda args: ('x'+str(1+(args.get('lvl',1)*0.5)),False)," points, mais chaque perte de vie est augmentée de ",lambda args:(1+(args.get('lvl',1)//4),False),"PV"),
     "Bulle_D_Eau" : ("Vous êtes invincible pendant ",lambda a : (f"vos {lvll(a)} premiers coups" if lvll(a)>1 else 'votre premier coup',False)," de chaque partie"),
     "Reveil_Endormi" : (("A l'achat, augmente définitivement de 0.3 secondes le temps d'affichage des cartes jouées"),),
-    "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"x4 points"),
+    "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"[sub]x4 points"),
     "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True)),
     "Tireur_Pro": ("Applique la marque Ciblé aux cartes jouées avec lui.","","[sub]Ciblé : la carte vibre si elle est de dos pendant que une carte identique est jouée sur une distance de ",lambda args:(args.get('lvl',1)+1,True),"[sub] cases"),
     "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez ",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
@@ -46,10 +54,48 @@ upgrades = {
     "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
     "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)"),
     "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False)),
-    "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","","[sub]Englué ", romainlvl,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre de dos")}
+    "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","", lambda a : (f"Les Bubble Mans inflige Englué {romain(lvll(a)+2)} aux cartes qui leurs sont adjacente en faisant un match" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False) ,"","[sub]Englué ", romainlvldesc,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre face cachée")}
 
 
 
+def find_font_size_msg(message, width, height, initial_font_size=10, police=font_police,
+                       bold=False, italic=False):
+
+    font_size = initial_font_size
+
+    # Fonction interne pour calculer les dimensions du texte
+    def get_size(fs):
+        font = pygame.font.SysFont(police, fs, bold=bold, italic=italic)
+        msg = font.render(message, False, (0, 0, 0))
+        return msg.get_width(), msg.get_height()
+
+    w, h = get_size(font_size)
+
+    print(font_size)
+
+
+    # Tant que ça rentre, on augmente
+    while w < width and h < height:
+        font_size += 1
+        w, h = get_size(font_size)
+
+    # On a dépassé → on redescend d’un cran
+    font_size -= 1
+    w, h = get_size(font_size)
+
+    print(font_size)
+
+    # Si jamais on dépasse encore, on ajuste vers le bas
+    while (w > width or h > height) and font_size > 1:
+        font_size -= 1
+        w, h = get_size(font_size)
+
+    return max(font_size, 1)
+
+
+def create_optimal_msg(message, width, height, initial_font_size = 10, police=font_police, bold=False, italic=False, color=(0,0,0), antialias = True) :
+    font = pygame.font.SysFont(police, find_font_size_msg(message,width,height, initial_font_size, police, bold, italic), bold=bold, italic=italic)
+    return font.render(message, antialias, color)
 
 
 
