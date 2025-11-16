@@ -35,6 +35,7 @@ SWITCH_BACKGROUND_SPEED = 1000
 
 accelere = False
 run_parameter = {}
+last_proposal_accepted = None
 
 # SEED=1893894
 # random.seed(1893894)
@@ -396,6 +397,8 @@ class Movement() :
                     if completion_ratio == 1 :
                         self.end()
 
+
+from pygame import Surface
 #========================= DISPLAYS ==========================#
 class grid() :
     def __init__(self, corner_left=(0,0), width=0, height=0, from_screen=False, rows = 8, cols = 8, square=False):
@@ -468,6 +471,14 @@ class grid() :
             round(self.ratio_x(col / self.cols) + marging),
             round(self.ratio_y(row / self.rows) + marging)
         )
+    
+    def place(self,e : Surface,  col, row, nb_col, nb_row) :
+        we, he = e.get_width(), e.get_height()
+        w = self.col_size(nb_col)
+        h = self.row_size(nb_row)
+
+        return (round(self.ratio_x(col / self.cols) + w/2 - we/2),
+                round(self.ratio_y(row / self.rows) + h/2 - he/2))
 
     
     def col_size(self, nb=1) :
@@ -1884,21 +1895,21 @@ def refresh() :
 def get_next_prob(current_prob) :
     return (0.2 if current_prob==0 else current_prob + 0.1) + random.randint(0,10)/100
 
-def proposal(card_name) :
+def proposal(card_name, from_bonus = False) :
     global selection_locked
     selection.clear()
     from description import generer_apparition_message, generer_message_de_description
     selection_locked = False
     
     # Create and display the card in the center
-    msg = font.render("Un combattant souhaite collaborer avec vous !", True, (255, 255, 255))
+    msg = create_optimal_msg("Un combattant souhaite collaborer avec vous !", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
+    
     card_display = Card(
-        SCREEN_WIDTH // 2 - 150,
-        SCREEN_HEIGHT // 2 - 250 + 100,
+        SCREEN_WIDTH//2 - (size:=global_grid.min_size(2))//2, global_grid.coords(3,3)[1],
         card_name,
         all_images_dict[card_name],
         (255, 150, 150),
-        250,
+        size,
         location="proposal"
     )
 
@@ -1909,24 +1920,26 @@ def proposal(card_name) :
         {"nom": card_name,
          "ancienne_probability": apparation_probability.get(card_name, 0)*100,
          "new_probability": int((new_prob := get_next_prob(apparation_probability.get(card_name, 0)))*100),
-         "prix": (prix:=math.ceil(UPGRADES_COST.get(card_name, 5)*(apparation_probability.get(card_name, 0)+0.1)*10))},width=SCREEN_WIDTH - 20, height=SCREEN_HEIGHT - 200)
+         "prix": (prix:=math.ceil(UPGRADES_COST.get(card_name, 5)*(apparation_probability.get(card_name, 0)+0.1)*10)),
+         "from_bonus":from_bonus},
+         width=global_grid.col_size(8), height=global_grid.row_size(2))
+    
     waiting = True
 
     description_surface_carte = generer_message_de_description(
                     {"nom": card_name, "lvl":fighters_lvl.get(card_name, 1), "lvl_init": fighters_lvl.get(card_name, 1), "proposal":True},
-                    width=SCREEN_WIDTH - 20,
-                    height=SCREEN_HEIGHT - card_display.rect.height - 220
+                    width=global_grid.col_size(8), height=global_grid.row_size(3)
     )
     
     while waiting:
         refresh()
 
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 130))
+        screen.blit(msg, global_grid.place(msg, 2, 1, 6, 1))
         if description_surface :
-            screen.blit(description_surface, (10, SCREEN_HEIGHT // 2 + description_surface.get_height() + card_display.rect.height // 2))
+            screen.blit(description_surface, global_grid.place(description_surface, 1,5,8,2))
         
         if description_surface_carte:
-            screen.blit(description_surface_carte, (10, SCREEN_HEIGHT - description_surface_carte.get_height() - 10))
+            screen.blit(description_surface_carte, global_grid.place(description_surface_carte, 1,7, 8, 3))
         
         update_draw_eclats()
         update_draw_cards([card_display])
@@ -1940,6 +1953,9 @@ def proposal(card_name) :
             elif validation(event) and eclat[0]>=prix :
                 apparation_probability[card_name] = new_prob
                 add_eclat(-prix)
+                if not from_bonus :
+                    global last_proposal_accepted
+                    last_proposal_accepted = card_display
                 waiting = False
             elif rejet(event) :
                 waiting = False
@@ -2061,6 +2077,13 @@ def create_optimal_msg(message, width, height, initial_font_size = 10, police=fo
 
 from pygame import Rect
 
+def middle(nb1) :
+    if nb1%2 :
+        return nb1//2 + 1
+    else :
+        return nb1//2
+
+
 def go_training() :
     # Nettoie l'écran et affiche un écran "fresh" en attendant une action de l'utilisateur
     global selection_locked
@@ -2071,6 +2094,17 @@ def go_training() :
     training_grid = grid(from_screen=True,rows=8, cols=8)
 
     cards_upgrade = seed_sample([card for card in all_images if UPGRADES_COST.get(card[0])],training_choices, event_name="training_choices")
+    global last_proposal_accepted
+    if last_proposal_accepted and UPGRADES_COST.get(last_proposal_accepted.name):
+        already_in = -1
+        for i,card in enumerate(cards_upgrade) :
+            if card[0] == last_proposal_accepted.name :
+                already_in = i 
+        
+        if already_in > -1:
+            cards_upgrade[already_in], cards_upgrade[middle(training_choices-1)], cards_upgrade[already_in], cards_upgrade[middle(training_choices)]
+        else :
+            cards_upgrade[middle(training_choices-1)] = (last_proposal_accepted.name, all_images_dict.get(last_proposal_accepted.name))
     all_cards : list[Card] = []
     updrade_lvl = {c : get_bonus_lvl(c) for c,_ in cards_upgrade}
 
@@ -2612,7 +2646,7 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-    run_parameter["p_training_choices"] = 2
+    #run_parameter["p_training_choices"] = 2
 
     start_run(**run_parameter)
     # apparation_probability["Bubble_Man"]=1

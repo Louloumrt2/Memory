@@ -123,6 +123,32 @@ DISPLAY_NAMES = {
     "Cheffe_Chauffocoeur":"Cheffe Chauffocoeur"
 }
 
+PRONOUNS = {
+    "8_Volt" : "elle",
+    "Les_Jumeaux" : "ils",
+    "Lori_Et_Les_Boaobs" : "ils",
+    "Bossu_Etoile" : "il",
+    "Masseuse_Des_Cieux" : "elle",
+    "Le_Vrilleur": "il",
+    "Smacker_Girl" : "elle",
+    "Bubble_Man" : "il",
+    "Mc_Cookie":"il",
+    "Tireur_Pro":"il",
+    "Fantome_A_Cheveux":"il",
+    "Croqueur_Avide":"il",
+    "Les_Elemetistes":"ils",
+    "Reveil_Endormi":"il",
+    "Lame_Sadique":"elle",
+    "Bulle_D_Eau":"elle",
+    "Canon_A_Energie":"il",
+    "Pipette_Elementaire":"elle",
+    "Bouquet_Medicinal":"il",
+    "Chat_De_Compagnie":"il",
+    "Cheffe_Chauffocoeur":"elle"
+}
+
+
+
 def entete(args) : # détermine le titre
     text = tuple()
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
@@ -156,18 +182,26 @@ def generer_apparition_message(args, width, height):
     nouvelle_proba = args.get("new_probability",10)
     prix = args.get("prix", 0)
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
+    pronons = PRONOUNS.get(nom, "iel")
 
 
     # Construire une liste de "tokens" : {text, color, italic, jump}
     tokens = (
-        [{"text": f"Enrôler {display_name} pour {prix} eclats : iel aura ", "color": (255, 255, 255), "italic": False, "jump": False},
-         {"text": f"{nouvelle_proba}%", "color": (200, 80, 200), "italic": False, "jump": False},
-         {"text": f" de chance d'apparaître spontannément à chaque partie", "color": (255, 255, 255), "italic": False, "jump": False}] if args.get("actual_probability") is None else
-        [{"text": f"Renforcer l'engagement avec {nom} pour {prix} eclats : proba d'apparition spontannée", "color": (255, 255, 255), "italic": False, "jump": False},
-         {"text": f" {ancienne_proba}%", "color": (255, 50, 50), "italic": False, "jump": False},
-         {"text": f" -> ", "color": (0, 255, 150), "italic": False, "jump": False},
-         {"text": f"{nouvelle_proba}%", "color": (200, 80, 200), "italic": False, "jump": False}]
+        [{"text": f"Enrôler {display_name} pour {prix} eclats :", "color": (255, 255, 255), "italic": False},
+         {"jump":True},
+         {"text": f"{pronons.capitalize()} aura ", "color": (255, 255, 255), "italic": False },
+         {"text": f"{nouvelle_proba}%", "color": (200, 80, 200), "italic": False},
+         {"text": f" de chance d'apparaître spontanément à chaque partie", "color": (255, 255, 255), "italic": False},
+         ] 
+         if args.get("ancienne_probability") == 0 else
+        [{"text": f"Renforcer l'engagement avec {nom} pour {prix} eclats : proba d'apparition spontanée", "color": (255, 255, 255), "italic": False},
+         {"text": f" {ancienne_proba}%", "color": (255, 50, 50), "italic": False},
+         {"text": f" -> ", "color": (0, 255, 150), "italic": False},
+         {"text": f"{nouvelle_proba}%", "color": (200, 80, 200), "italic": False}]
     )
+    if not args.get("from_bonus") :
+        tokens.append({"jump":True})
+        tokens.append({"text":f"(Ceci va également vous garantir que {nom} sera proposé au prochain entrainement)", "color":(255,255,255), "italic":True})
 
     return generer_message_via_tokens(tokens, width, height)
 
