@@ -73,7 +73,9 @@ UPGRADES_COST = {
     "Fantome_A_Cheveux":4,
     "Catchy":4,
     "Bubble_Man":2,
-    "Piouchador":4
+    "Piouchador":4,
+    "Lo" : 6,
+    "Felinfeu":5,
 }
 
 
@@ -961,7 +963,7 @@ class Card:
                 
                 case "Piquante" :
                     if nb_match == 0 :
-                        add_lives(1 + lvl//3)
+                        add_lives(- (1 + lvl//3), from_=[self], all_cards=cards)
                         pop_up([self], "Piquée !", cards, (255,0,0), pop_up_font, time=800)
                     else :
                         for _ in range(1 + lvl//3) :
@@ -1020,6 +1022,33 @@ class Card:
                             if card_success :
                                 pop_up(card_success, "Englué !", cards, (255,100,100))
                         already_done.append("Bubble_Man")
+                    
+                case "Lo" :
+                    les_lo = []
+                    for card in selection :
+                        if card != self and ca_match(card, self) :
+                            les_lo.append(card)
+                    if nb_match>0 and not "Lo" in already_done: 
+                        les_lignes = [get_row(cards, lo.row) for lo in [self]+les_lo]
+                        protected_cards = []
+                        for row in les_lignes :
+                            for troupe in row :
+                                success = troupe.put_tag(("barageau", lvl, (200,200,255)), all_cards=cards, from_=[self]+les_lo)
+                                if success :
+                                    protected_cards.append(troupe)
+                        if protected_cards :
+                            pop_up(protected_cards, "Barag'eau !", cards, (200,200,255))
+                    already_done.append("Lo")
+                
+                case "Felinfeu" :
+                    if nb_match > 0 :
+                        global combo
+                        if combo>1 : 
+                            add_score(combo*(1+(lvl//2)))
+                            pop_up([self], f"+ {combo} x {lvl} !", cards, (255,120,30), pop_up_font, time=800)
+
+
+
                         
 
 
@@ -1042,7 +1071,7 @@ class Card:
                 if "soin" == tag[0] :
                     if nb_match > 0 :
                         pop_up([self], "Soigné !", cards, tag[2], pop_up_font, time=100)
-                        add_lives(1)
+                        add_lives(1, from_=[self], all_cards=cards)
         
         # Activer les effets des tags des autres cartes
 
@@ -1405,15 +1434,34 @@ def curving(ratio) :
 def not_removed_cards(cards) :
     return [card for card in cards if not card.remove]
 
-def get_row(cards, index) :
-    return sorted([card for card in cards if card.row==index and not card.remove], key = lambda card : card.row)
+def get_row(cards, index) -> list[Card] :
+    return sorted([card for card in cards if card.row==index and not card.remove], key = lambda card : card.col)
 
 
 
-def add_lives(ch, extra_var=None) :
+def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None) :
     global move
     global last_live_change_tick
     last_live_change_tick = pygame.time.get_ticks()
+
+    if from_ and all_cards :
+        tanked = False
+        for troupe in from_ :
+            troupe_act = troupe
+            tag = troupe.get_tag("barageau")
+            if tag and (get_random("barageau") < (tag[1]/tag[1]+4)) :
+                tanked = True
+                tag_break = get_random("barageau_break") < (max(0.25,40/(50+tag[1])))
+                break
+        if tanked :
+            pop_up([troupe_act], "Protégé !", all_cards, message_color=(200,200,255))
+            if tag_break :
+                pop_up([troupe_act], "Détruit !", all_cards, message_color=(100,100,175))
+                troupe_act.delete_tag(tag)
+            add_score("damage_dodge")
+            return 
+            
+
 
     if (lvl_bulle_deau := objects_lvl.get("Bulle_D_Eau",0)) and ch<0:
         if move < lvl_bulle_deau+1 :
@@ -1684,7 +1732,7 @@ def activate_object_effect(objet, lvl, cards, start_of_round_effect=False) :
     if objet=="Trognon" and start_of_round_effect :
         card_to_poison = seed_sample(cards, min(1+(lvl//2), len(cards)))
         poisonned_cards=[]
-        add_lives(lvl)
+        add_lives(lvl, "from_heal_object")
         add_show_effect("Trognon", 600)
         for card in card_to_poison :
             success = card.put_tag(("poison", lvl, (160,10,160)), cards)
@@ -1872,34 +1920,41 @@ def play_memory(num_pairs=8, forced_cards = None):
             if all(card.flip_progress==1 for card in selection):
 
                 selection_locked = True
+
+                
+                
+
                 if not start_show_time :
                     start_show_time = pygame.time.get_ticks()
+
+                    names = [t.name for t in selection]
+                    if any(names.count(card.name)> 1 for name in names) :
+                        combo = combo + 1
+                    else :
+                        if fighters_lvl.get("Felinfeu",0) >= 4 and any(card.name=="Felinfeu" for card in selection) :
+                            pop_up([card for card in selection if card.name=="Felinfeu"], "COMBO INNARETABLE", cards, (255,200,30))
+                        else :
+                            combo = 0
+                    
                     activate_effect(selection, cards, nb_move=move)
                 
                 elif pygame.time.get_ticks() - start_show_time > showing_time :
                     names = [t.name for t in selection]
                     if any(names.count(name)>1 for name in names):
-
-
-                        if last_succeed_move == move-1 :
-                            combo = combo + 1
-                        else :
-                            combo = 1
                         
                         last_succeed_move = move
                         add_score("match")
-
-
 
                         for c in selection:
                             c.matched = True
                             c.flipped = False
                             c.remove = True
                     else:
-                        add_lives(-1)
+                        add_lives(-1, from_ = selection, all_cards=cards)
                         add_score("dontmatch")
                         for c in selection:
                             c.flipped = False
+
                     
                     for card in cards :
                         card.selected = False
@@ -2961,25 +3016,29 @@ def lvl_rain(num_pairs=8, forced_cards = None):
             # attendre que les deux soient bien visibles
             if all(card.flip_progress==1 for card in selection):
 
+                
+
+
                 selection_locked = True
                 if not start_show_time :
                     start_show_time = pygame.time.get_ticks()
+
+                    names = [t.name for t in selection]
+                    if any(names.count(card.name)> 1 for name in names) :
+                        combo = combo + 1
+                    else :
+                        if fighters_lvl.get("Felinfeu",0) >= 4 and any(card.name=="Felinfeu" for card in selection) :
+                            pop_up([card for card in selection if card.name=="Felinfeu"], "COMBO INNARETABLE", cards, (255,200,30))
+                        else :
+                            combo = 0
+                            
                     activate_effect(selection, cards, nb_move=move)
                 
                 elif pygame.time.get_ticks() - start_show_time > showing_time :
                     names = [t.name for t in selection]
                     if any(names.count(name)>1 for name in names):
-
-
-                        if last_succeed_move == move-1 :
-                            combo = combo + 1
-                        else :
-                            combo = 1
-                        
-                        last_succeed_move = move
+                    
                         add_score("match")
-
-
 
                         for c in selection:
                             c.matched = True
@@ -3151,10 +3210,10 @@ if __name__ == "__main__":
     #     add_object(o)
 
     start_run(**run_parameter)
-    # apparation_probability["Piouchador"]=1
-    # fighters_lvl["Piouchador"]=7
-    # apparation_probability["Catchy"]=1
-    # fighters_lvl["Catchy"]=1
+    # apparation_probability["Piquante"]=1
+    # fighters_lvl["Piquante"]=7
+    # apparation_probability["Lo"]=1
+    # fighters_lvl["Lo"]=4
     # run_seed="m"
 
     # guaranted_objet = [("Trognon",1)] # (nom, niveau)
