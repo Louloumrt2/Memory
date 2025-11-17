@@ -413,6 +413,7 @@ class grid() :
 
         self.rows = rows
         self.cols = cols
+        self.last_place = {}
 
         if self.square :
             a_square_size = min(self.width/self.cols, self.height/self.rows)
@@ -447,6 +448,7 @@ class grid() :
         self.width = width
         self.height = height
         self.corner_left = new_corner
+        self.last_place.clear()
 
         if self.square :
             a_square_size = min(self.width/self.cols, self.height/self.rows)
@@ -472,13 +474,22 @@ class grid() :
             round(self.ratio_y(row / self.rows) + marging)
         )
     
-    def place(self,e : Surface,  col, row, nb_col, nb_row) :
-        we, he = e.get_width(), e.get_height()
+    def place(self,e : Surface|tuple[int,int],  col, row, nb_col, nb_row) :
+        if (isinstance(e, Surface)) :
+            e = e.get_width(), e.get_height()
+        if (already_placed := self.last_place.get((col, row, nb_col, nb_row, *e))) :
+                return already_placed
+
+        we, he = e
         w = self.col_size(nb_col)
         h = self.row_size(nb_row)
 
-        return (round(self.ratio_x(col / self.cols) + w/2 - we/2),
+        new_placement =  (round(self.ratio_x(col / self.cols) + w/2 - we/2),
                 round(self.ratio_y(row / self.rows) + h/2 - he/2))
+        
+        self.last_place[(col, row, nb_col, nb_row, *e)] = new_placement
+        
+        return new_placement
 
     
     def col_size(self, nb=1) :
@@ -542,6 +553,7 @@ class grid() :
         if self.follow_screen :
             self.width = SCREEN_WIDTH
             self.height = SCREEN_HEIGHT
+            self.last_place.clear()
     
     def save_size(self) :
         self.save_size = (self.width, self.height)
@@ -1039,6 +1051,13 @@ class Card:
         self.init_x = x 
         self.init_y = y
         self.init_size = new_size
+    
+    def change_size(self, new_size) :
+        self.init_size = new_size
+    
+    def change_coords(self, x, y) :
+        self.init_x = x 
+        self.init_y = y
 
         
     def check_modification(self, nb_move) :
@@ -1545,15 +1564,15 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 if card.name == "Fantome_A_Cheveux" and fighters_lvl.get(card.name,0) and me :
                     to_add = []
                     for character in me : # Je parcours tout ceux qui m'ont révélé
-                        print("Character in me : ",character.name)
+                        # print("Character in me : ",character.name)
                         if fighters_lvl.get(character.name, 0) : # Je vérifie la personne qui m'a révélé a sa compétence activé
                             if character.name == "Fantome_A_Cheveux" : # Si c'est un autre fantome à cheveux, j'ajoute toutes ses copies que je n'ai pas
                                 to_add.extend(added := [e for e in character.character_copied if e not in card.character_copied and e not in to_add])
-                                print("added",added)
+                                # print("added",added)
                             else :
                                 if character.name not in card.character_copied : to_add.append(character.name) # Sinon j'ajoute directement le personnage
                     
-                    print("to_add",to_add)
+                    # print("to_add",to_add)
                     card.character_copied.extend(to_add)
                     
             
@@ -1725,12 +1744,11 @@ def play_memory(num_pairs=8, forced_cards = None):
             check_resize(event)
 
             if event.type == pygame.VIDEORESIZE :
-                print("a")
                 bords = SCREEN_WIDTH//8, SCREEN_HEIGHT//8
-                print(bords)
+                # print(bords)
                 taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
                 playing_field.update_width_height(taille, taille, new_corner=(bords[0], bords[1]))
-                print(playing_field.my_rect_info())
+                # print(playing_field.my_rect_info())
 
                 size = round(playing_field.col_size()*0.9)
                 margin = round(playing_field.col_size()*0.05)
@@ -1902,7 +1920,7 @@ def proposal(card_name, from_bonus = False) :
     selection_locked = False
     
     # Create and display the card in the center
-    msg = create_optimal_msg("Un combattant souhaite collaborer avec vous !", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
+    msg = render_multiline("Un combattant souhaite collaborer avec vous !", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
     
     card_display = Card(
         SCREEN_WIDTH//2 - (size:=global_grid.min_size(2))//2, global_grid.coords(3,3)[1],
@@ -1947,6 +1965,22 @@ def proposal(card_name, from_bonus = False) :
   
         for event in pygame.event.get():
             check_resize(event)
+            if event.type == pygame.VIDEORESIZE :
+                msg = render_multiline("Un combattant souhaite collaborer avec vous !", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
+                description_surface = generer_apparition_message(
+                {"nom": card_name,
+                "ancienne_probability": apparation_probability.get(card_name, 0)*100,
+                "new_probability": int((new_prob := get_next_prob(apparation_probability.get(card_name, 0)))*100),
+                "prix": (prix:=math.ceil(UPGRADES_COST.get(card_name, 5)*(apparation_probability.get(card_name, 0)+0.1)*10)),
+                "from_bonus":from_bonus},
+                width=global_grid.col_size(8), height=global_grid.row_size(2))
+
+                description_surface_carte = generer_message_de_description(
+                            {"nom": card_name, "lvl":fighters_lvl.get(card_name, 1), "lvl_init": fighters_lvl.get(card_name, 1), "proposal":True},
+                            width=global_grid.col_size(8), height=global_grid.row_size(3)
+                )
+                card_display.change_size_cords((size:=global_grid.min_size(2)), SCREEN_WIDTH//2 - size//2, global_grid.coords(3,3)[1])
+
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -2075,6 +2109,89 @@ def create_optimal_msg(message, width, height, initial_font_size = 10, police=fo
     font = pygame.font.SysFont(police, find_font_size_msg(message,width,height, initial_font_size, police, bold, italic), bold=bold, italic=italic)
     return font.render(message, antialias, color)
 
+
+def wrap_text(message, font, max_width):
+    words = message.split(" ")
+    lines = []
+    current_line = ""
+
+    for word in words:
+        test_line = current_line + (" " if current_line else "") + word
+        if font.size(test_line)[0] <= max_width:
+            current_line = test_line
+        else:
+            # On pousse la ligne actuelle et on recommence
+            lines.append(current_line)
+            current_line = word
+
+    if current_line:
+        lines.append(current_line)
+
+    return lines
+
+def find_max_font_size_multiline(message, width, height, police, bold=False, italic=False):
+    low, high = 1, 300
+    best = 1
+
+    while low <= high:
+        mid = (low + high) // 2
+        font = pygame.font.SysFont(police, mid, bold=bold, italic=italic)
+
+        lines = wrap_text(message, font, width)
+        total_height = len(lines) * font.get_linesize()
+
+        if total_height <= height:
+            best = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    return best
+
+def render_multiline(
+    message, width, height, police=font_police,
+    bold=False, italic=False, color=(0,0,0), antialias=True,
+    align="left", valign="top"
+):
+    optimal_size = find_max_font_size_multiline(
+        message, width, height, police, bold, italic
+    )
+
+    font = pygame.font.SysFont(police, optimal_size, bold=bold, italic=italic)
+    lines = wrap_text(message, font, width)
+
+    # Surface finale
+    surf = pygame.Surface((width, height), pygame.SRCALPHA)
+
+    # Hauteur totale du bloc de texte
+    total_height = len(lines) * font.get_linesize()
+
+    # --- Gestion verticale ---
+    if valign == "center":
+        y = (height - total_height) // 2
+    elif valign == "bottom":
+        y = height - total_height
+    else:  # top
+        y = 0
+
+    for line in lines:
+        txt = font.render(line, antialias, color)
+
+        # --- Gestion horizontale ---
+        if align == "center":
+            x = (width - txt.get_width()) // 2
+        elif align == "right":
+            x = width - txt.get_width()
+        else:  # left
+            x = 0
+
+        surf.blit(txt, (x, y))
+        y += font.get_linesize()
+
+    return surf
+
+
+
 from pygame import Rect
 
 def middle(nb1) :
@@ -2124,8 +2241,8 @@ def go_training() :
         
         if last_window_size_change > last_msg_generated_tick :
             # creation du message
-            titre_zone = training_grid.create_rect(1,0,6,2)
-            msg = create_optimal_msg("C'est l'heure de l'entrainement ! Mais qui entrainer ?", width=titre_zone.width, height=titre_zone.height, bold=True, color=(255, 255, 255))
+            titre_zone = training_grid.create_rect(1,1,6,1)
+            msg = render_multiline("C'est l'heure de l'entrainement ! Mais qui entrainer ?", width=titre_zone.width, height=titre_zone.height, bold=True, color=(255, 255, 255), align="center")
             msgx,msgy = titre_zone.centerx - msg.get_width()/2,titre_zone.centery- msg.get_height()/2
             # Creation du displayer de cartes
             d_w, d_h = 6, 4
@@ -2355,19 +2472,29 @@ def memo_shop_present():
     
     last_cards_shop.clear()
 
+
+    
+    msg = render_multiline("Retenez bien l'ordre de ces cartes pour plus tard !",width=global_grid.col_size(8), height=global_grid.row_size(2), bold=True,color= (255, 255, 255), align="center")
+
+    card_display = grid(global_grid.coords(1,3), global_grid.col_size(8), global_grid.row_size(4), cols=shop_choices, rows=1)
+
+
     for i,card_image in enumerate(cards_images) :
         card_name, card_im = card_image
-        card = Card(*global_grid.coords(2+3*i, 5), card_name, card_im, (230,230,20), global_grid.min_size()*2, "shop")
+        card = Card(0,0, card_name, card_im, (230,230,20), card_display.min_size(), "shop")
+        card.change_size(round(size := card_display.min_size()*0.9))
+        card.change_coords(*card_display.place((size,size), i, 0, 1, 1))
+        
         card.flipped = True
         card.flip_progress = 1
         last_cards_shop.append(card)
-    
-    msg = font.render("Retenez bien l'ordre de ces cartes pour plus tard !", True, (255, 255, 255))
+
     waiting = True
     previewed_card = None
     while waiting :
         refresh()
-        screen.blit(msg, (global_grid.coords(2,2)))
+        # card_display.draw(screen)
+        screen.blit(msg, (global_grid.place(msg,1,1,8,2)))
         
         update_draw_cards(last_cards_shop)
         
@@ -2384,8 +2511,11 @@ def memo_shop_present():
         for event in pygame.event.get():
             check_resize(event)
             if event.type == pygame.VIDEORESIZE :
-                for card in last_cards_shop :
-                    card.change_size_cords(global_grid.min_size(),*global_grid.coords(2+3*i, 5))
+                card_display.update_width_height(global_grid.col_size(7), global_grid.row_size(4), global_grid.coords(1,3))
+                msg = render_multiline("Retenez bien l'ordre de ces cartes pour plus tard !",width=global_grid.col_size(8), height=global_grid.row_size(2), bold=True,color= (255, 255, 255), align="center")
+                for i,card in enumerate(last_cards_shop) :
+                    card.change_size(size := round(card_display.min_size()*0.9))
+                    card.change_coords(*card_display.place((size,size), i, 0, 1, 1))
             if event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
                 waiting = False
             elif event.type == pygame.QUIT:
@@ -2403,7 +2533,7 @@ def memo_shop_present():
     
     while not all(card.flip_progress==0 for card in last_cards_shop) :
         refresh()
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
+        screen.blit(msg, (global_grid.place(msg,1,1,8,2)))
 
         for card in last_cards_shop :
             card.selected = False
@@ -2421,27 +2551,36 @@ def memo_shop_receive() :
     from description import generer_message_de_description
     from description import desc_italic_font
 
-    msg = font.render("Rebienvenu ! Vous vous souvenez bien de tous ?", True, (255, 255, 255))
-    msg2 = desc_italic_font.render("Effectuer une paire pour que l'achat vous soit proposé", True, (255, 255, 255))
+    msg = render_multiline("Rebienvenu ! Vous vous souvenez bien de tous ?", width=global_grid.col_size(8), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
+    msg2 = render_multiline("Effectuer une paire pour que l'achat vous soit proposé", width=global_grid.col_size(7), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
 
-    cards_upgrade =  2*last_cards_shop
+    
 
     order = [i for i in range(len(last_cards_shop))]
     seed_shuffle(order)
 
+    card_display = grid(global_grid.coords(1,4),global_grid.col_size(8), global_grid.row_size(4), cols=shop_choices, rows=2)
+
     selection.clear()
-    for i,card in enumerate(cards_upgrade) :
-        card.selected = False
-        if i < len(cards_upgrade)//2 :
-            cards_upgrade[i] = Card(last_cards_shop[order[i]].x, card.y-150, card.name, card.image, card.color, card.rect.width, location="shop")
-            cards_upgrade[i].flipped = True
-        else :
-            card.flipped = False
-            card.init_y += card.rect.height - 120
-            card.y = card.init_y
+    card_upgrades = []
+    size = round(card_display.min_size()*0.9)
+    for row in range(2) :
+        if row==0 :
+            for i,card in enumerate(last_cards_shop) :
+                card : Card
+                card.selected = False
+                card.change_size(size)
+                card.change_coords(*card_display.place((size,size), i, 0,1,1))
 
-        card.flip_progress = 0
+                card.flip_progress = 1
+                card.flipped=True
+                card_upgrades.append(card)
+        if row==1 :
+            for i in range(len(last_cards_shop)) :
+                card = Card(*card_display.place((size,size), order[i], 1, 1, 1), card_upgrades[i].name, image= card_upgrades[i].image, color=card_upgrades[i].color,size=size, location="shop")
+                card_upgrades.append(card)
 
+    
 
     wait_for_respons = False
     ending = False 
@@ -2449,12 +2588,12 @@ def memo_shop_receive() :
     while not ending:
         refresh()
 
-        screen.blit(msg, (SCREEN_WIDTH // 2 - msg.get_width() // 2, 50))
-        screen.blit(msg2, (SCREEN_WIDTH // 2 - msg2.get_width() // 2, 60 + msg.get_height()))
+        screen.blit(msg, global_grid.place(msg,1,1,8,1))
+        screen.blit(msg2, global_grid.place(msg2,1,2,8,1))
 
         
         # pygame.draw.rect(screen, blend_multi(((230,200,130), (180,70,160),(120,95,200)), blend_constant), displayer, border_radius=10)
-        update_draw_cards(cards_upgrade)
+        update_draw_cards(card_upgrades)
         # Afficher les éclats en haut à droite
         update_draw_eclats()
 
@@ -2462,26 +2601,37 @@ def memo_shop_receive() :
         
         # Détecter le passage de souris sur une carte
         mouse_pos = pygame.mouse.get_pos()
-        for card in cards_upgrade:
+        for card in card_upgrades:
             if card.rect.collidepoint(mouse_pos) and card.flip_progress>=0.5 and not card.remove and not ending:
                 description_surface = generer_message_de_description(
                     {"nom": card.name, "lvl":objects_lvl.get(card.name, 0)+1,"lvl_init": objects_lvl.get(card.name, 0), "prix":UPGRADES_COST.get(card.name, 0)*(objects_lvl.get(card.name, 0)+1)},
-                    width=SCREEN_WIDTH - 20,
-                    height=SCREEN_HEIGHT - 90
+                    width=global_grid.col_size(8), height=global_grid.row_size(2)
                 )
                 if description_surface:
-                    pygame.draw.rect(screen, (0,0,0), pygame.Rect(8,SCREEN_HEIGHT - description_surface.get_height() - 9, description_surface.get_width(), description_surface.get_height()),border_radius=3)
-                    screen.blit(description_surface, (10, SCREEN_HEIGHT - description_surface.get_height() - 10))
+                    pygame.draw.rect(screen, (0,0,0), global_grid.create_rect(1,8,8,2) ,border_radius=3)
+                    screen.blit(description_surface, global_grid.place(description_surface, 1,8,8,2))
                 break
 
         for event in pygame.event.get():
             check_resize(event)
+            if event.type == pygame.VIDEORESIZE :
+                msg = render_multiline("Rebienvenu ! Vous vous souvenez bien de tous ?", width=global_grid.col_size(8), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
+                msg2 = desc_italic_font.render("Effectuer une paire pour que l'achat vous soit proposé", width=global_grid.col_size(7), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
+
+                size=round(card_display.min_size()*0.9)
+                for i,card in enumerate(card_upgrades) :
+                    card.change_size(size)
+                    card.change_coords(*card_display.place((size,size), i%shop_choices, i//shop_choices, 1, 1))
+
+
+
+
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()    
             elif event.type == pygame.MOUSEBUTTONDOWN and not selection_locked:
                 mouse_pos = event.pos
-                for card in cards_upgrade:
+                for card in card_upgrades:
                     if card.rect.collidepoint(mouse_pos) and card in selection :
                         card.selected = False
                         selection.remove(card)  
@@ -2506,7 +2656,7 @@ def memo_shop_receive() :
                 for card in selection :
                     card.selected = False
                     card.remove = True 
-                    for card2 in cards_upgrade :
+                    for card2 in card_upgrades :
                         if card2.name==card.name :
                             card2.remove = True
                 selection.clear()
@@ -2522,7 +2672,7 @@ def memo_shop_receive() :
                 for card in selection :
                     card.selected = False
                     card.remove = True 
-                    for card2 in cards_upgrade :
+                    for card2 in card_upgrades :
                         if card2.name==card.name :
                             card2.remove = True
                 
@@ -2534,19 +2684,19 @@ def memo_shop_receive() :
             for card in selection : card.flipped = True
             if all(card.flip_progress==1 for card in selection) :
                 if selection[0].name == selection[1].name :
-                    msg = font.render("Voulez vous acheter ceci pour "+str(UPGRADES_COST.get(selection[0].name,5)*objects_lvl.get(selection[0].name, 1)) +" éclats ?", True, (255, 255, 255))
+                    msg = render_multiline("Voulez vous acheter ceci pour "+str(UPGRADES_COST.get(selection[0].name,5)*objects_lvl.get(selection[0].name, 1)) +" éclats ?", width=global_grid.col_size(8),height= global_grid.row_size(1) ,color= (255, 255, 255))
                     
                 else :
-                    msg = font.render("Mauvaise réponses, cartes perdus !", True, (255, 150, 150))
+                    msg = render_multiline("Mauvaise réponse : cartes perdues !", width=global_grid.col_size(8),height= global_grid.row_size(1) ,color= (255, 255, 255))
                 
                 wait_for_respons = True 
                 selection_locked = True
         
-        elif len([card for card in cards_upgrade if not card.remove]) == 0 :
+        elif len([card for card in card_upgrades if not card.remove]) == 0 :
             ending = True
         
         else :
-            msg = font.render("Rebienvenu ! Vous vous souvenez bien de tous ?" if len([card for card in cards_upgrade if not card.remove])==2*len(last_cards_shop) else "Continuez continuez !!", True, (255, 255, 255))
+            msg = render_multiline("Rebienvenu ! Vous vous souvenez bien de tous ?", width=global_grid.col_size(8), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
             
 
         
@@ -2617,8 +2767,8 @@ def do_next() :
     do_next()
 
 
-def add_object(name):
-    lvl = objects_lvl.get(name,0)
+def add_object(name, sp_lvl=None):
+    lvl = sp_lvl or objects_lvl.get(name,0)
 
     if name == "Reveil_Endormi" :
         global showing_time
@@ -2646,14 +2796,13 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-    #run_parameter["p_training_choices"] = 2
-
     start_run(**run_parameter)
     # apparation_probability["Bubble_Man"]=1
     # fighters_lvl["Bubble_Man"]=7
     # apparation_probability["Catchy"]=1
     # fighters_lvl["Catchy"]=1
     # run_seed="m"
+
 
 
 
