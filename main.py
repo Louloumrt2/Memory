@@ -2681,14 +2681,14 @@ def memo_shop_receive() :
                 card : Card
                 card.selected = False
                 card.change_size(size)
-                card.change_coords(*card_display.place((size,size), i, 0,1,1))
+                card.change_coords(*card_display.place((size,size), order[i], 0,1,1))
 
                 card.flip_progress = 1
                 card.flipped=True
                 card_upgrades.append(card)
         if row==1 :
             for i in range(len(last_cards_shop)) :
-                card = Card(*card_display.place((size,size), order[i], 1, 1, 1), card_upgrades[i].name, image= card_upgrades[i].image, color=card_upgrades[i].color,size=size, location="shop")
+                card = Card(*card_display.place((size,size), i, 1, 1, 1), card_upgrades[i].name, image= card_upgrades[i].image, color=card_upgrades[i].color,size=size, location="shop")
                 card_upgrades.append(card)
 
     
