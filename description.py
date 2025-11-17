@@ -1,5 +1,5 @@
 import pygame
-from font import desc_font, desc_italic_font, font_police
+from font import desc_font, desc_italic_font, font_police, desc_font_panel, desc_italic_font_panel
 import math
 
 
@@ -46,15 +46,17 @@ upgrades = {
     "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True)),
     "Tireur_Pro": ("Applique la marque Ciblé aux cartes jouées avec lui.","","[sub]Ciblé : la carte vibre si elle est de dos pendant que une carte identique est jouée sur une distance de ",lambda args:(args.get('lvl',1)+1,True),"[sub] cases"),
     "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez ",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
-    "Chat_De_Compagnie": ("Gagnez ", lambda args : (lvll(args), False)," points par soin gagné.","","Vous avez ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+4,False)," d'améliorer chaque soin subis de 1 PV"),
-    "Ghosting": ("Lors de la selection des paires pour les prochaines manches, chaque carte sans compétence a ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+14,False)," d'être remplacée par une troupe avec compétence'.","[sub] Dans la limite du possible"),
-    "Canon_A_Energie": ("Génère un rayon révellant toutes les cartes d'une colonne toute les 9 vibrations de carte effectuées.","","La révélation dure ",lambda a : (200+100*lvll(a)/1000, False), " secondes et génère ",lambda a : (2*lvll(a), False)," points par carte révélée.","",lambda a : (f"La sélection de la colonne ciblée {'très '*((lvll(a)//3)-1)} est améliorée" if lvll(a)>3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
+    "Chat_De_Compagnie": ("Gagnez ", lambda args : (lvll(args), False)," points par soin gagné.","","Vous avez ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+9,False)," d'améliorer chaque soin subis de 1 PV"),
+    "Ghosting": ("Lors de la selection des paires pour les prochaines manches, chaque carte sans compétence a ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+14,False)," d'être remplacée par une troupe avec compétence'.","","[sub] Dans la limite du possible"),
+    "Canon_A_Energie": ("Génère un rayon révellant toutes les cartes d'une colonne toute les 9 vibrations de carte effectuées.","","La révélation dure ",lambda a : ((200+100*lvll(a))/1000, False), " secondes et génère ",lambda a : (2*lvll(a), False)," points par carte révélée.","",lambda a : (f"La sélection de la colonne ciblée {'très '*((lvll(a)//3)-1)} est améliorée" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Bouquet_Medicinal":("A l'achat, vous guerris ",lambda a : (lvll(a)*5,False), "PV instantannément"),
     "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
     "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)"),
     "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False)),
-    "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","", lambda a : (f"Les Bubble Mans inflige Englué {romain(lvll(a)+2)} aux cartes qui leurs sont adjacente en faisant un match" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False) ,"","[sub]Englué ", romainlvldesc,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre face cachée")}
+    "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","", lambda a : (f"Les Bubble Mans inflige Englué {romain(lvll(a)+2)} aux cartes qui leurs sont adjacente en faisant un match" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False) ,"","[sub]Englué ", romainlvldesc,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre face cachée"),
+    "Piouchador":("Quand il est sencé recevoir une marque provenant d'une autre troupe, vibre et renvoit la marque à ceux qui l'ont envoyé.","Cette marque est amélioré de ", lambda a : (lvll(a),False)," niveau."),
+    "Trognon":("Au début de chaque partie de memory, régénère ",lambda a : (lvll(a),False)," PV et applique la marque Poison ", romainlvl, " à ", lambda a : (1+(lvll(a)//2), False), " cartes en jeu","","[sub]Poison ", romainlvldesc, "[sub] : A chaque fois qu'un coup est joué, les cartes empoissonné ne matchant pas enlève ",lambda a : (lvll(a),True),"[sub] points et vibrent")}
 
 
 
@@ -144,7 +146,18 @@ PRONOUNS = {
     "Pipette_Elementaire":"elle",
     "Bouquet_Medicinal":"il",
     "Chat_De_Compagnie":"il",
-    "Cheffe_Chauffocoeur":"elle"
+    "Cheffe_Chauffocoeur":"elle",
+    "Max" : "il",
+    "Catchy": "il",
+    "Felinfeu": "il",
+    "Flosette" : "elle",
+    "Lo" : "il",
+    "Maniak" : "iel",
+    "Michel" : "il",
+    "Ordinateur":"il",
+    "Piouchador":'il',
+    "Piquante":"elle",
+    "Titanique":"elle"
 }
 
 
@@ -152,9 +165,15 @@ PRONOUNS = {
 def entete(args) : # détermine le titre
     text = tuple()
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
+    lvl = args.get("lvl",0)
 
     if args.get("proposal", False) :
-        text += (("Compétence du personnage :"),)
+        text += ((f"Compétence du personnage :{ ' (à débloquer dans la partie !)' if not lvl else '' }"),)
+        text += ((""),)
+    elif args.get("panel",False) :
+        text += ((display_name+" au niveau "),)
+        text += (lambda args : (args.get('lvl',0), False),)
+        text += ((" : "),)
         text += ((""),)
     else :
         if args.get("lvl_init",0) == 0 :
@@ -179,7 +198,11 @@ def entete(args) : # détermine le titre
 def generer_apparition_message(args, width, height):
     nom = args.get("nom", "")
     ancienne_proba = args.get("ancienne_probability",0)
+    if ancienne_proba == int(ancienne_proba) : ancienne_proba = int(ancienne_proba)
+    else : ancienne_proba = round(ancienne_proba, 2)
     nouvelle_proba = args.get("new_probability",10)
+    if nouvelle_proba == int(nouvelle_proba) : nouvelle_proba = int(nouvelle_proba)
+    else : nouvelle_proba = round(nouvelle_proba, 2)
     prix = args.get("prix", 0)
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
     pronons = PRONOUNS.get(nom, "iel")
@@ -201,7 +224,7 @@ def generer_apparition_message(args, width, height):
     )
     if not args.get("from_bonus") :
         tokens.append({"jump":True})
-        tokens.append({"text":f"(Ceci va également vous garantir que {nom} sera proposé au prochain entrainement)", "color":(255,255,255), "italic":True})
+        tokens.append({"text":f"(Ceci va également vous garantir que {display_name} sera proposé au prochain entrainement)", "color":(255,255,255), "italic":True})
 
     return generer_message_via_tokens(tokens, width, height)
 
@@ -217,7 +240,7 @@ def generer_message_via_tokens(tokens, width, height,):
         # gestion du saut de ligne explicite
         if token.get("jump"):
             # avancer d'une ligne vide
-            font_to_use = desc_italic_font if token.get("italic") else desc_font
+            font_to_use = (desc_italic_font if token.get("italic") else desc_font) 
             y_offset += font_to_use.get_height() + line_spacing
             x_offset = 0
             continue
@@ -308,12 +331,12 @@ def generer_message_de_description(args, width, height, green_value=(0, 255, 150
         # gestion du saut de ligne explicite
         if token["jump"]:
             # avancer d'une ligne vide
-            font_to_use = desc_italic_font if token["italic"] else desc_font
+            font_to_use = (desc_italic_font if token["italic"] else desc_font) if not args.get("small") else (desc_italic_font_panel if token["italic"] else desc_font_panel)
             y_offset += font_to_use.get_height() + line_spacing
             x_offset = 0
             continue
 
-        font_to_use = desc_italic_font if token["italic"] else desc_font
+        font_to_use = (desc_italic_font if token["italic"] else desc_font) if not args.get("small") else (desc_italic_font_panel if token["italic"] else desc_font_panel)
         color = green_value if token["green"] else (255, 255, 255)
         text = token["text"]
 

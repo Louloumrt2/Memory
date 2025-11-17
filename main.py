@@ -53,7 +53,7 @@ SCORES = {
 
 UPGRADES_COST = {
     "8_Volt" : 2,
-    "Michel" : 4,
+    "Michel" : 5,
     "Max" : 5,
     "Flosette":5,
     "Le_Vrilleur":6,
@@ -61,18 +61,19 @@ UPGRADES_COST = {
     "Bulle_D_Eau":6,
     "Reveil_Endormi":4,
     "Allumette":4,
-    "Pipette_Elementaire":5,
+    "Pipette_Elementaire":7,
     "Tireur_Pro":5,
     "Piquante":6,
-    "Chat_De_Compagnie":4,
-    "Canon_A_Energie":6,
+    "Chat_De_Compagnie":6,
+    "Canon_A_Energie":5,
     "Bouquet_Medicinal":5,
     "Ghosting":8,
     "Maniak":7,
-    "Mc_Cookie":5,
+    "Mc_Cookie":3,
     "Fantome_A_Cheveux":4,
     "Catchy":4,
-    "Bubble_Man":3
+    "Bubble_Man":2,
+    "Piouchador":4
 }
 
 
@@ -619,11 +620,11 @@ def bonus_score(action, extravar=None) :
         if lvl := objects_lvl.get("Allumette",0) :
             if combo > 1 :
                 add_show_effect("Allumette")
-                base += (combo-1) * (3+lvl)
+                base += (combo-1) * (2+lvl)
 
         if lvl := objects_lvl.get("Lame_Sadique",0) :
             add_show_effect("Lame_Sadique")
-            base *= (1 + lvl)
+            base *= (1 + lvl*0.5)
 
     if action in ("live_gained") :
         if lvl := objects_lvl.get("Chat_De_Compagnie",0) :
@@ -838,7 +839,18 @@ class Card:
             try : self.stack_color_modifiers.remove(COLORS_MODIFIERS["dzzit"])
             except : None
         
-    def put_tag(self, tag) :
+    def put_tag(self, tag, all_cards, from_=None,   piouchador_break=False) :
+        if from_ and not piouchador_break and self.name == "Piouchador" and (lvl:=fighters_lvl.get("Piouchador",0)) :
+            reussite = []
+            for troupe in from_ :
+                if troupe.put_tag((tag[0], tag[1]+lvl, tag[2]), all_cards, from_=[self], piouchador_break=True) : reussite.append(troupe)
+            if reussite :
+                self.dzzit()
+                pop_up([self], "Contré !", all_cards, message_color=(255,0,0),time= 500)
+                pop_up(reussite, f"Reçu !", all_cards, tag[2], time=500)
+            return False
+
+
 
         remove_tags = set()
         for tag_ in self.tags :
@@ -886,7 +898,7 @@ class Card:
                     cards_michelled = []
                     for card in selection :
                         if card != self :
-                            try_put = card.put_tag(("michel",lvl,(0,255,0)))
+                            try_put = card.put_tag(("michel",lvl,(0,255,0)), cards, from_=[self])
                             if try_put : cards_michelled.append(card)
                     if cards_michelled : pop_up(cards_michelled, "michellifié !", cards, message_color=(0,255,150),font=pop_up_font)
     
@@ -926,7 +938,7 @@ class Card:
                         if cards_soignee :
                             card_success = []
                             for card in cards_soignee :
-                                try_put = card.put_tag(("soin", (lvl+2)//2, (255,120,120))) # On tente d'appliquer le tag
+                                try_put = card.put_tag(("soin", (lvl+2)//2, (255,120,120)), cards, from_=flosette_effect) # On tente d'appliquer le tag
                                 if try_put : card_success.append(card)
                             if card_success :
                                 pop_up(card_success, "Soin !", cards, (255,100,100))
@@ -943,7 +955,7 @@ class Card:
                     cards_a_cible = []
                     for card in selection :
                         if card != self :
-                            try_put = card.put_tag(("cible",lvl,(60,60,60)))
+                            try_put = card.put_tag(("cible",lvl,(60,60,60)), cards, from_=[self])
                             if try_put : cards_a_cible.append(card)
                     if cards_a_cible : pop_up(cards_a_cible, "Ciblé !", cards, message_color=(150,150,150),font=pop_up_font)
                 
@@ -986,7 +998,7 @@ class Card:
                     cards_bubbled = []
                     for card in selection :
                         if card != self :
-                            try_put = card.put_tag(("englue",lvl,(255,190,210)))
+                            try_put = card.put_tag(("englue",lvl,(255,190,210)), cards, from_=[self])
                             if try_put : cards_bubbled.append(card)
                     if cards_bubbled : pop_up(cards_bubbled, "Englué !", cards, message_color=(255,190,210),font=pop_up_font)
 
@@ -1003,7 +1015,7 @@ class Card:
                         if cartes_englues :
                             card_success = []
                             for card in cartes_englues :
-                                try_put = card.put_tag(("englue", lvl+2, (255,190,210)))
+                                try_put = card.put_tag(("englue", lvl+2, (255,190,210)), cards, from_=bb_cards)
                                 if try_put : card_success.append(card)
                             if card_success :
                                 pop_up(card_success, "Englué !", cards, (255,100,100))
@@ -1069,6 +1081,15 @@ class Card:
                 
                 removed_tags.add(tag)
                 if soin_restant > 0 : added_tag.add(("soin", soin_restant, (tag[2])))
+            
+            if tag[0] == "poison" :
+                if not self.matched :
+                    poison_restant = tag[1] - 1
+                    self.dzzit()
+                    add_score(-tag[1])
+                    
+                    removed_tags.add(tag)
+                    if poison_restant > 0 : added_tag.add(("poison", poison_restant, (tag[2])))
 
         
         self.tags |= added_tag
@@ -1205,7 +1226,7 @@ class Card:
 
 
 # --- FONCTION DE CREATION DU PLATEAU ---
-def create_board(num_pairs, x, y, width, height,  forced_pairs = None):
+def create_board(num_pairs, x, y, width, height,  forced_pairs = None, only_lvl_up_disponible=False):
     
 
     total_cards = num_pairs * 2
@@ -1214,7 +1235,13 @@ def create_board(num_pairs, x, y, width, height,  forced_pairs = None):
     rows = math.ceil(total_cards / cols)
     playing_field = grid((x,y), width, height, cols=cols, rows=rows,square=True)
 
-    chosen_images = seed_sample(all_images, num_pairs)
+    if only_lvl_up_disponible :
+        try :
+            chosen_images = seed_sample([(name, image) for name, image in all_images if UPGRADES_COST.get(name)], num_pairs)
+        except :
+            chosen_images = seed_sample(all_images, num_pairs)
+    else :
+        chosen_images = seed_sample(all_images, num_pairs)
     if (lvl := objects_lvl.get('Ghosting',0)) :
                 removed = []
 
@@ -1295,7 +1322,7 @@ def update_draw_score(score = player_score, lives = player_lives) :
             if score[2]>-1 : score[2]=0
         
         score_display = math.ceil(score[0] - score[1] - score[2])
-        score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''} {'- '+str(math.floor(score[2])) if score[2] else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
+        score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''} {'- '+str(abs(math.floor(score[2]))) if score[2] else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
 
 
         if lives[1] > 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
@@ -1401,8 +1428,9 @@ def add_lives(ch, extra_var=None) :
         add_show_effect("Lame_Sadique")
     
     if (lvl_chat_comp := objects_lvl.get("Chat_De_Compagnie",0)) and ch>0 : 
-        if get_random("chat_de_compagnie") < (lvl_chat_comp / lvl_chat_comp+4) : ch += 1
-        add_show_effect("Chat_De_Compagnie")
+        if get_random("chat_de_compagnie") < (lvl_chat_comp / lvl_chat_comp+9) :
+            ch += 1
+            add_show_effect("Chat_De_Compagnie")
     
     player_lives[0] += ch
     if player_lives[0]>max_player_live :
@@ -1553,7 +1581,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 for tag in all_tags :
                     tag_upgrade = (tag[0], tag[1]+max(0,pipette_lvl-1), tag[2])
                     for card in cards :
-                        try_put = card.put_tag(tag_upgrade)
+                        try_put = card.put_tag(tag_upgrade, cards, me)
                         if try_put and card not in card_enhanced : card_enhanced.append(card)
               
                 if card_enhanced :
@@ -1641,7 +1669,7 @@ def random_cols(cards, priviligies_bigger_col = 0, include_remove = False, event
 
 
 
-def activate_object_effect(objet, lvl, cards) :
+def activate_object_effect(objet, lvl, cards, start_of_round_effect=False) :
     if objet == "Canon_A_Energie" :
         global charge 
         if charge >= 9 :
@@ -1652,6 +1680,20 @@ def activate_object_effect(objet, lvl, cards) :
             col = random_cols(cards, lvl>=3 and lvl/3)
             add_score(2*len(col))
             small_reveal(col, cards, "BOOOOOOM", message_color=(240,240,100),font=font, time=200+lvl*100, me=None)
+    
+    if objet=="Trognon" and start_of_round_effect :
+        card_to_poison = seed_sample(cards, min(1+(lvl//2), len(cards)))
+        poisonned_cards=[]
+        add_lives(lvl)
+        add_show_effect("Trognon", 600)
+        for card in card_to_poison :
+            success = card.put_tag(("poison", lvl, (160,10,160)), cards)
+            if success : poisonned_cards.append(card)
+        if success :
+            pop_up(poisonned_cards, "Trognon !!", cards, (200,60,150))
+
+
+
 
 
 
@@ -1670,13 +1712,15 @@ def est_adjacent(card1,card2, radius=1) :
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
     return abs(card1.row - card2.row) + abs(card1.col - card2.col)<=radius
 
-def wait_with_cards(cards,time) :
+def wait_with_cards(cards,time, fun=None) :
     init = gtick()
     while gtick() - init < time :
         draw_bg()
         update_draw_cards(cards)
         update_draw_score(player_score,player_lives)
+        if fun : fun()
         update_clock()
+        
 
 def wait_finish_return(cards):
     # Attendre tant qu'il y a au moins une carte en cours d'animation (0 < progress < 1)
@@ -1714,8 +1758,9 @@ def play_memory(num_pairs=8, forced_cards = None):
     global selection_locked, move, last_succeed_move, combo
     cards : list["Card"]
 
-    bords = SCREEN_WIDTH//8, SCREEN_HEIGHT//8
+    
     taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+    bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
     playing_field, cards, cols, rows = create_board(num_pairs,bords[0],bords[1],taille,taille,forced_pairs=forced_cards)
     player_score[0]
     last_selection_time = 0
@@ -1723,6 +1768,7 @@ def play_memory(num_pairs=8, forced_cards = None):
     start_show_time = 0
     ending = 0
     move = 1
+    first_move_effect = 0
 
     last_window_changed_local = gtick()
 
@@ -1737,6 +1783,8 @@ def play_memory(num_pairs=8, forced_cards = None):
 
         draw_bg()
         
+        
+
 
         # événements
         for event in pygame.event.get():
@@ -1744,9 +1792,10 @@ def play_memory(num_pairs=8, forced_cards = None):
             check_resize(event)
 
             if event.type == pygame.VIDEORESIZE :
-                bords = SCREEN_WIDTH//8, SCREEN_HEIGHT//8
+                
                 # print(bords)
                 taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+                bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
                 playing_field.update_width_height(taille, taille, new_corner=(bords[0], bords[1]))
                 # print(playing_field.my_rect_info())
 
@@ -1804,6 +1853,14 @@ def play_memory(num_pairs=8, forced_cards = None):
         # mise à jour
         for card in cards:
             card.update()
+
+        
+        if not first_move_effect :
+            first_move_effect = True
+
+            for o, lvl in objects_lvl.items() :
+                activate_object_effect(o,lvl, cards, start_of_round_effect=True)
+
 
         # logique du jeu
         if len(selection) == SELECTION_LIMIT:
@@ -1877,7 +1934,7 @@ def play_memory(num_pairs=8, forced_cards = None):
             
             update_draw_score(player_score, player_lives)
             gain_eclat = get_end_of_round_eclat(cards)
-            end_text = font.render(f"Grille finite ! Eclats Gagnés : {gain_eclat}", True, (255, 255, 0))
+            end_text = font.render(f"Grille terminée ! Eclats Gagnés : {gain_eclat}", True, (255, 255, 0))
             screen.blit(end_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
             end_text2 = font.render(f"PV regagné : {regain_PV_manche}", True, (255,150,150))
             screen.blit(end_text2, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + end_text.get_height()+5))
@@ -1891,7 +1948,7 @@ def play_memory(num_pairs=8, forced_cards = None):
         elif player_lives[0] <= 0:
             refresh()
             cards.clear()
-            end_text = font.render("💀 Plus de vies !", True, (255, 50, 50))
+            end_text = font.render("Plus de vies !", True, (255, 50, 50))
             screen.blit(end_text, (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2))
             selection_locked = True
             ending = True
@@ -1993,6 +2050,7 @@ def proposal(card_name, from_bonus = False) :
                 waiting = False
             elif rejet(event) :
                 waiting = False
+                last_proposal_accepted = None
         
         update_clock()
 
@@ -2023,8 +2081,6 @@ def get_bonus_lvl(name) :
     if fighters_lvl.get(name,0) == 0 : return 1
     nb = get_random("bonus_lvl")
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
-
-
 
 
 
@@ -2552,7 +2608,7 @@ def memo_shop_receive() :
     from description import desc_italic_font
 
     msg = render_multiline("Rebienvenu ! Vous vous souvenez bien de tous ?", width=global_grid.col_size(8), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
-    msg2 = render_multiline("Effectuer une paire pour que l'achat vous soit proposé", width=global_grid.col_size(7), height=global_grid.row_size(1) ,align="center", bold=True, color=(255, 255, 255))
+    msg2 = render_multiline("Effectuer une paire pour que l'achat vous soit proposé", width=global_grid.col_size(7), height=global_grid.row_size(0.5) ,align="center", italic=True, color=(255, 255, 255))
 
     
 
@@ -2704,7 +2760,302 @@ def memo_shop_receive() :
     
     last_cards_shop.clear()
 
+def card_panel(card_names, width, height, show_competence=True, show_probs=False, page_len=None, is_previous=False, bg_panel_color=(55,55,55)):
+    result = []
 
+    nb_card = len(card_names)
+    nb_pages = (nb_card // page_len + (1 if nb_card % page_len else 0)) if page_len else 1
+    panel_grid = grid((0,0), width, height, cols=(1 + (show_competence * 2) + show_probs),
+                      rows=page_len or nb_card)
+
+    from description import generer_message_de_description
+
+    for n_page in range(nb_pages):
+        total_surf = Surface((panel_grid.width, panel_grid.height))
+        pygame.draw.rect(total_surf, bg_panel_color, panel_grid.my_rect())
+
+
+        start = n_page * (page_len or nb_card)
+        end = start + (page_len or nb_card)
+        page_cards = card_names[start:end]
+
+        for n_card, c_name in enumerate(page_cards):
+            card_size = panel_grid.min_size(0.9)
+            xx, yy = panel_grid.place((card_size, card_size), 0, n_card, 1, 1)
+
+            card = Card(xx, yy, c_name, all_images_dict.get(c_name), (0, 0, 0), card_size, "panel")
+            card.flipped=True
+            card.flip_progress=1
+            
+
+            if show_competence:
+                if fighters_lvl.get(c_name, 0) - is_previous:
+                    desc = generer_message_de_description(
+                        {"nom": c_name, "lvl": fighters_lvl.get(c_name, 0) - is_previous,
+                        "lvl_init": fighters_lvl.get(c_name, 0) - is_previous, "panel": True, "small":panel_grid.rows>3,
+                        "show_previous": is_previous},
+                        height=panel_grid.row_size(1),
+                        width=panel_grid.col_size(2),
+                    )
+                    if desc:
+                        total_surf.blit(desc, panel_grid.place(desc, 1, n_card, 2, 1))
+            
+            card.update()
+            card.draw(total_surf)
+
+        result.append(total_surf)
+
+    return result
+
+    
+            
+
+
+
+
+
+
+
+
+
+
+def lvl_rain(num_pairs=8, forced_cards = None):
+    global selection_locked, move, last_succeed_move, combo
+    cards : list["Card"]
+
+
+    taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+    bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
+    playing_field, cards, cols, rows = create_board(num_pairs,bords[0],bords[1],taille,taille,forced_pairs=forced_cards, only_lvl_up_disponible=True)
+    last_selection_time = 0
+    running = True
+    start_show_time = 0
+    ending = 0
+    move = 1
+    show_previous_progress = 0
+    first_move_effect = False
+
+    last_window_changed_local = gtick()
+
+    for card in cards :
+        card.flipped = True
+
+    wait_finish_return(cards)
+
+    def retiens() :
+        show_message("Retenez !", pos=global_grid.place((global_grid.col_size(4), global_grid.row_size(2)), 2, 1, 4, 1), recenterx=False)
+    wait_with_cards(cards, showing_time*3, fun = retiens)
+
+    for card in cards :
+        card.flipped = False
+
+    wait_finish_return(cards)
+
+
+
+    while running:
+
+        # if last_window_size_change > last_window_changed_local :
+
+        #     for card in cards :
+        #         cards.change
+
+
+
+        draw_bg()
+        
+        if ((keys := pygame.key.get_pressed())[pygame.K_LCTRL] or keys[pygame.K_RCTRL]):
+                show_previous_progress = min(1,show_previous_progress+SHOW_PREVIOUS_SPEED)
+        else :
+                show_previous_progress = max(0,show_previous_progress-SHOW_PREVIOUS_SPEED)
+        # événements
+        for event in pygame.event.get():
+            acceleration(event)
+            check_resize(event)
+
+            if event.type == pygame.VIDEORESIZE :
+
+                if not ending :
+                
+                    # print(bords)
+                    taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
+                    bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
+                    playing_field.update_width_height(taille, taille, new_corner=(bords[0], bords[1]))
+                    # print(playing_field.my_rect_info())
+
+                    size = round(playing_field.col_size()*0.9)
+                    margin = round(playing_field.col_size()*0.05)
+                    for card in cards :
+                        card.change_size_cords(size, *playing_field.coords(card.col, card.row, marging=margin))
+                
+                else :
+                    end_text = create_optimal_msg(f"Fin de la pluie des niveaux ! Niveaux gagnés : {len(matched)}", width = global_grid.col_size(8), height=global_grid.row_size(1) ,color=(255, 255, 0))
+                    recap_w, recap_h = global_grid.col_size(8), global_grid.row_size(6)
+                    recap_surfaces = card_panel(list(matched), recap_w, recap_h)
+                    recap_old_surface = card_panel(list(matched), recap_w, recap_h, is_previous=True)
+                    recap_rect= global_grid.create_rect(1,2,8,7)
+
+
+            
+
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif validation(event) and ending :
+                running = False 
+                break
+
+            elif acceleration(event) and start_show_time :
+                start_show_time -= showing_time/2
+                break
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if not selection_locked :
+                    if getattr(event, "button", None) == 2 : # touche de pré-selection (clique molette)
+                        for card in cards:
+                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and (card not in selection):
+                                if card.selected :
+                                    card.selected = False
+                                    selection.remove(card)
+                                elif len(selection) < SELECTION_LIMIT:
+                                    card.selected = True
+                                    selection.append(card)
+                                    last_selection_time = pygame.time.get_ticks()
+                    
+                    if getattr(event, "button", None) == 3 : # touche de déselection (clique droit)
+                        for card in cards:
+                            if not card.flipped and not card.remove and card.selected:
+                                if card.selected :
+                                    card.selected = False
+                                    selection.remove(card)
+                    
+                    if getattr(event, "button", None) == 1 : # touche de révellation (montre une carte : clic gauche)
+                        for card in cards:
+                            if card.selected and not card.remove and not card.flipped :
+                                card.flipped = True
+                            
+                            if not card in selection and not card.remove and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
+                                card.selected = True 
+                                selection.append(card)
+                                card.flipped = True
+                                last_selection_time = pygame.time.get_ticks()
+        
+         
+
+        # mise à jour
+        for card in cards:
+            card.update()
+        
+        if not first_move_effect :
+            first_move_effect = True
+
+            for o, lvl in objects_lvl.items() :
+                activate_object_effect(o,lvl, cards)
+
+        # logique du jeu
+        if len(selection) == SELECTION_LIMIT:
+            selection_locked = True
+            for card in selection :
+                card.flipped=True
+
+            # attendre que les deux soient bien visibles
+            if all(card.flip_progress==1 for card in selection):
+
+                selection_locked = True
+                if not start_show_time :
+                    start_show_time = pygame.time.get_ticks()
+                    activate_effect(selection, cards, nb_move=move)
+                
+                elif pygame.time.get_ticks() - start_show_time > showing_time :
+                    names = [t.name for t in selection]
+                    if any(names.count(name)>1 for name in names):
+
+
+                        if last_succeed_move == move-1 :
+                            combo = combo + 1
+                        else :
+                            combo = 1
+                        
+                        last_succeed_move = move
+                        add_score("match")
+
+
+
+                        for c in selection:
+                            c.matched = True
+                            c.flipped = False
+                            c.remove = True
+                    else:
+                        # add_lives(-1)
+                        add_score("dontmatch")
+                        for c in selection:
+                            c.flipped = False
+                    
+                        names = [c.name for c in selection]
+                        for card in cards :
+                            card.selected = False
+                            if card.name in names :
+                                card.remove = True
+                    
+                    for card in cards :
+                        card.check_modification(move)
+                    
+                    wait_finish_return(cards)
+
+                    for o, lvl in objects_lvl.items() :
+                        activate_object_effect(o,lvl, cards)
+                    
+                    last_selection.clear()
+                    last_selection.extend(selection)
+                    selection.clear()
+
+                    start_show_time = 0
+                    selection_locked = False
+
+                    move += 1
+
+        # dessin des cartes
+        for card in cards:
+            card.draw(screen)
+
+        # texte
+        update_draw_score(player_score, player_lives)
+        
+
+        # conditions de fin
+        if ending or all(c.remove for c in cards):
+            if not ending :
+                add_score("end_play")
+                matched = set((card.name for card in cards if card.matched))
+                for name in matched :
+                    fighters_lvl[name] = fighters_lvl.get(name,0)+1
+                recap_w, recap_h = global_grid.col_size(8), global_grid.row_size(6)
+                recap_surfaces = card_panel(list(matched), recap_w, recap_h)
+                recap_old_surface = card_panel(list(matched), recap_w, recap_h, is_previous=True)
+                recap_rect= global_grid.create_rect(1,2,8,7)
+                end_text = create_optimal_msg(f"Fin de la pluie des niveaux ! Niveaux gagnés : {len(matched)}", width = global_grid.col_size(8), height=global_grid.row_size(1) ,color=(255, 255, 0))
+
+            pygame.draw.rect(screen, (55,55,55), recap_rect, border_radius=5)
+
+            if not show_previous_progress :
+                recap_surfaces[0].set_alpha(int(255*(1-show_previous_progress)))
+                screen.blit(recap_surfaces[0], global_grid.place((recap_w, recap_h), 1,2,8,7))
+            else :
+                recap_surfaces[0].set_alpha(int(255*(1-show_previous_progress)))
+                recap_old_surface[0].set_alpha(int(255*(show_previous_progress)))
+                screen.blit(recap_surfaces[0], global_grid.place((recap_w, recap_h), 1,2,8,7))
+                screen.blit(recap_old_surface[0], global_grid.place((recap_w, recap_h), 1,2,8,7))
+
+            update_draw_score(player_score, player_lives)
+            # gain_eclat = get_end_of_round_eclat(cards)
+            
+            screen.blit(end_text, global_grid.place(end_text, 1,1,8,1))
+            
+            ending = True
+        
+        update_clock()
+
+    
 
     
 
@@ -2715,6 +3066,9 @@ def do_next() :
     memo_shopped = False
     while player_lives[0]>0 :
         move = 0
+        if game["round"]%10 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
+            selection_locked = False
+            lvl_rain(forced_cards=get_apparition_cards())
 
         if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]):
             game["state"]="memo_shop"
@@ -2786,7 +3140,7 @@ if __name__ == "__main__":
 
     # # Pour beta_test :
     # guaranted = [("8_Volt",4),("Tireur_Pro",4)] # (nom, niveau)
-    # guaranted_objet = [("Canon_A_Energie",5)] # (nom, niveau)
+    
 
     # for name, lvl in guaranted :
     #     apparation_probability[name] = 1
@@ -2797,15 +3151,21 @@ if __name__ == "__main__":
     #     add_object(o)
 
     start_run(**run_parameter)
-    # apparation_probability["Bubble_Man"]=1
-    # fighters_lvl["Bubble_Man"]=7
+    # apparation_probability["Piouchador"]=1
+    # fighters_lvl["Piouchador"]=7
     # apparation_probability["Catchy"]=1
     # fighters_lvl["Catchy"]=1
     # run_seed="m"
 
+    # guaranted_objet = [("Trognon",1)] # (nom, niveau)
+    # for o, lvl in guaranted_objet :
+    #     objects_lvl[o] = lvl 
+    #     add_object(o)
 
+    # game["round"]=10
+    # game["state"]="training"
 
-
+    
 
     while True :
         do_next()
