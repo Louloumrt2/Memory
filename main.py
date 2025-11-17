@@ -782,6 +782,8 @@ class Card:
         self.dziit_progress = 0
         self.dziited = False
         self.englued = False
+        self.delete_stack = []
+        self.break_barageau = False
 
         self.row = 0
         self.col = 0
@@ -1122,9 +1124,11 @@ class Card:
 
         
         self.tags |= added_tag
-        for tag in removed_tags :
+        for tag in removed_tags | set(self.delete_stack) :
             self.delete_tag(tag)
         
+        self.delete_stack.clear()
+        self.break_barageau = False
                     
 
                             
@@ -1448,7 +1452,7 @@ def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None
         tanked = False
         for troupe in from_ :
             troupe_act = troupe
-            tag = troupe.get_tag("barageau")
+            tag = not troupe.break_barageau and troupe.get_tag("barageau")
             if tag and (get_random("barageau") < (tag[1]/tag[1]+4)) :
                 tanked = True
                 tag_break = get_random("barageau_break") < (max(0.25,40/(50+tag[1])))
@@ -1457,7 +1461,8 @@ def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None
             pop_up([troupe_act], "Protégé !", all_cards, message_color=(200,200,255))
             if tag_break :
                 pop_up([troupe_act], "Détruit !", all_cards, message_color=(100,100,175))
-                troupe_act.delete_tag(tag)
+                troupe_act.delete_stack.append(tag)
+                troupe_act.break_barageau = True
             add_score("damage_dodge")
             return 
             
@@ -3211,8 +3216,8 @@ if __name__ == "__main__":
 
     start_run(**run_parameter)
     # apparation_probability["Piquante"]=1
-    # fighters_lvl["Piquante"]=7
-    # apparation_probability["Lo"]=1
+    fighters_lvl["Lo"]=7
+    apparation_probability["Lo"]=1
     # fighters_lvl["Lo"]=4
     # run_seed="m"
 
