@@ -3216,8 +3216,8 @@ if __name__ == "__main__":
 
     start_run(**run_parameter)
     # apparation_probability["Piquante"]=1
-    fighters_lvl["Lo"]=7
-    apparation_probability["Lo"]=1
+    # fighters_lvl["Lo"]=7
+    # apparation_probability["Lo"]=1
     # fighters_lvl["Lo"]=4
     # run_seed="m"
 
