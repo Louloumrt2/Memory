@@ -8,7 +8,7 @@ pygame.init()
 
 # --- CONFIGURATION ---
 SCREEN_WIDTH, SCREEN_HEIGHT = 1000, 800
-grids = []
+grids = [] # cette liste globale contient l'ensemble des objets de classe grid instanciés. Cela permet d'aisément modifier leur taille en modifier la taille de l'ecran
 last_window_size_change= pygame.time.get_ticks()
 
 
@@ -16,26 +16,29 @@ DEBUG_SHOW_GRID = False
 
 
 FPS = 60
-FLIP_SPEED = 10
-SELECTED_SPEED = 50
+FLIP_SPEED = 10 # vitesse de retournement des cartes
+SELECTED_SPEED = 50 # vitesse d'agrandissement des cartes sélectionnées
 SELECTION_LIMIT = 2
-SELECTION_BIGGER_SCALE = 1.05
+SELECTION_BIGGER_SCALE = 1.05 # échelle d'agrandissement des cartes sélectionnées
 # REVEAL_DELAY = 1500  # ms (1.5 s)
 
-BEFORE_ADDING = 200  # ms (1 s)
-DUREE_ECLAT_FADING = 1000
-ADDING_SPEED = 1.1
+BEFORE_ADDING = 200  # ms pendant lequel l'affichage des variations restent afficher
+DUREE_ECLAT_FADING = 1000 # ms durée de l'effet de fading des éclats qui se désafichent
+ADDING_SPEED = 1.1 # Vitesse à laquelle les éclats gagné/perdus sont "déposé" dans le compteur 
 
+# Pour les vibrations des cartes
 DZITT_SPEED = 15
+
+# Pour les effets visuels de rebondissement
 BONCE_EFFECT_TIME = 300
 BONCE_EFFECT_INTENSITY = 30
-SHOW_PREVIOUS_SPEED = 0.05
+SHOW_PREVIOUS_SPEED = 0.05 # Vitesse de transition entre les stats du niveau actuel et celle du nouveau niveau
 
 SWITCH_BACKGROUND_SPEED = 1000
 
-accelere = False
-run_parameter = {}
-last_proposal_accepted = None
+accelere = False # quand vaut True, certaines annimations passent plus vite
+run_parameter = {} # Modifiers pour le lancement de la prochaine run
+last_proposal_accepted = None # deviendra la derniere carte accéptée dans une Proposition
 
 # SEED=1893894
 # random.seed(1893894)
@@ -44,13 +47,14 @@ best_score = 0
 
 
 
-
+# SCORES représente les gains initiaux de points pour chaque action du jeu (les actions ne sont pas toutes rentrées ici)
 SCORES = {
     "match" : 5,
     "dontmatch" : 0,
     "end_play" : 10
 }
 
+# Prix d'achat / d'amélioration de toutes les cartes du jeu (objet comme personnages)
 UPGRADES_COST = {
     "8_Volt" : 2,
     "Michel" : 5,
@@ -76,6 +80,10 @@ UPGRADES_COST = {
     "Piouchador":4,
     "Lo" : 6,
     "Felinfeu":5,
+    "Lori_Et_Les_Boaobs":3,
+    "Celeste":5,
+    "Trognon":4,
+    "Bossu_Etoile":4,
 }
 
 
@@ -117,24 +125,33 @@ def load_images(folder):
             images.append((name, img))
     return images
 
-all_images = load_images("cards_pict")
-
-
+all_images = load_images("cards_pict") # Contient les paires (nom, Image) des personnages
 all_objects_images = load_images("objects_pict")
+all_benec_malec_images = load_images("benec_malec_pict") # Contient les paires (nom, Image) des personnages
 
-all_images_dict = dict(all_images)
+all_images_dict = dict(all_images) # De même mais avec comme clé le nom et comme valeur l'image
 all_objects_dict = dict(all_objects_images)
+all_belec_malec_dict = dict(all_benec_malec_images)
+all_benec = [name for name, _ in all_benec_malec_images if "benec" in name]
+all_malec = [name for name, _ in all_benec_malec_images if "malec" in name and name!="default_malec_malus"]
+all_malus = [name for name,_ in all_benec_malec_images if "malus" in name]
+all_benec_dict = { name: all_belec_malec_dict[name] for name in all_benec }
+all_malec_dict = { name: all_belec_malec_dict[name] for name in all_malec }
+all_malus_dict = { name: all_belec_malec_dict[name] for name in all_malus }
 
 #=============================== RANDOMISERS =============================#
 
 run_seed = int(random.random()*10000)
-random_event_use = {}
+random_event_use = {} # dictionnaire qui compte le nombre d'utilisation d'un event aléatoire donné
 
-def get_event_id(event_name) :
+def get_event_id(event_name) : 
+    """Définit l'ID de l'évènement en prenant [nom de l'évenement] + [seed de la run] + [nombre d'utilisation de l'évènement dans la run]
+    Cela garantit que chaque appel à un évènement aléatoire donné dans une run donnée produira toujours le même résultat, mais que deux appels successifs à un même évènement produiront des résultats différents"""
     random_event_use[event_name] = random_event_use.get(event_name,0)+1
     return f"{event_name}+{run_seed}+{random_event_use[event_name]}"
 
 def get_random(event_name="generic_event") :
+    """Retourne un float aléatoire entre 0 et 1, en fonction de l'event_name et du run_seed"""
     event_id = get_event_id(event_name)
 
     random.seed(event_id)
@@ -143,6 +160,7 @@ def get_random(event_name="generic_event") :
     return res
 
 def seed_choice(population, event_name="generic_choice") :
+    """Retourne un élément aléatoire de la population donnée, en fonction de l'event_name et du run_seed"""
     event_id = get_event_id(event_name)
 
     random.seed(event_id)
@@ -151,6 +169,7 @@ def seed_choice(population, event_name="generic_choice") :
     return choice
 
 def seed_choices(population, k=1, cum_weight=None, event_name="generic_choices") :
+    """Retourne k éléments aléatoires de la population donnée, en fonction de l'event_name et du run_seed"""
     event_id = get_event_id(event_name)
 
     random.seed(event_id)
@@ -162,6 +181,7 @@ def seed_choices(population, k=1, cum_weight=None, event_name="generic_choices")
     return choices
 
 def seed_sample(things, k=1, event_name="generic_sample") :
+    """Retourne k éléments aléatoires distincts de la population donnée, en fonction de l'event_name et du run_seed"""
     event_id = get_event_id(event_name)
 
     random.seed(event_id)
@@ -170,6 +190,7 @@ def seed_sample(things, k=1, event_name="generic_sample") :
     return choice
 
 def seed_shuffle(things, event_name="generic_shuffle") :
+    """Mélange la liste donnée en place, en fonction de l'event_name et du run_seed"""
     event_id = get_event_id(event_name)
     random.seed(event_id)
     random.shuffle(things)
@@ -183,42 +204,50 @@ def seed_shuffle(things, event_name="generic_shuffle") :
 
 # PLAYER INFO
 
-last_score_change_tick = pygame.time.get_ticks()
+# Utile pour faire afficher les variations de score un certains temps
+last_score_change_tick = pygame.time.get_ticks() 
 last_live_change_tick = pygame.time.get_ticks()
 last_eclat_change_tick = pygame.time.get_ticks()
 
 selection : list["Card"] = [] # sera la liste des cartes sélectionné -> passe à 2 = révèlent
 selection_locked = False
 
-selection_overload = 0
+selection_overload = 0 # innutilisé pour l'instant
 
-last_selection = []
-showing_time = 1200
-fighters_lvl = {}
-objects_lvl = {}
-level_upgrade_base = 1
-apparation_probability = {}
-player_lives = [20, 0, 0, 0]
-max_player_live = 30
-player_score = [0, 0, 0]
-eclat = [10,0,0]
-regain_PV_manche = 2
+last_selection : list["Card"] = [] # sera la liste des cartes sélectionné au tour précédent
+showing_time = 1200 # Durée initial d'affichage des cartes jouées
+fighters_lvl = {} # Stock les niveaux actuels de chaque personnages (pas de niv : competence non débloqué)
+objects_lvl = {} # idem pour les objets
+level_upgrade_base = 1 # niveau de base des personnages/objets proposés à l'amélioration
+apparation_probability = {} # probabilité d'apparition de chaque personnage/objet (pourra être modifié par des effets en jeu)
+player_lives = [20, 0, 0, 0] # vies du joueur + affichage des variations de gains de vie + affichage des variations des pertes de vie + affichage des PV tanké
+max_player_live = 30 # vie MAX
+player_score = [0, 0, 0] # comme pour player_lives
+eclat = [10,0,0] # comme pour player_lives
+regain_PV_manche = 2 # gain de PV à chaque manche
+exhaustion_effect = 0
+expansion_effect = 0
 
-combo = 0
-last_succeed_move = 0
-move= 0
-charge = 0 # augmenté grâc à certaines actions dont dzzit
+combo = 0 # nombre de match consécutif (se réinitialise en cas de paires sans match)
+last_succeed_move = 0 # numero du dernier mouvement réussi (pour le combo)
+move= 0 # numéro du mouvement actuel
+charge = 0 # augmenté grâce à certaines actions dont dzzit. Sert pour le canon à énergie
 
-training_choices = 3
-proposal_after_training_prob = 0.3
-shop_choices = 3
-bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)]
+training_choices = 3 # Nombre de choix en entrainement
+proposal_after_training_prob = 0.3 # Probabilité de créer une Proposition avec la carte entrainée
+shop_choices = 3 # Choix dans le memo_shop
+bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)] # Les probabilités d'avoir un bonus de niveau 1,2,3,...
 
+# pas utilisés pour l'instant
 scores_constantes_modifiers_plus = {}
 scores_constantes_modifiers_mult = {}
 
-def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3) :
-    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live
+# Benec et malec
+benec_and_malec = []
+
+# lance une run. Utilisez run_parameter pour lancer une run selon des conditions précises
+def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3, p_benec_and_malec = None, p_exhaustion_effect=0, p_expansion_effect=0, seed_input=None) :
+    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live, exhaustion_effect, expansion_effect
     
     last_score_change_tick = pygame.time.get_ticks()
     last_live_change_tick = pygame.time.get_ticks()
@@ -245,6 +274,8 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     eclat.clear()
     eclat.extend([start_eclat,0,0])
     regain_PV_manche = p_regain_PV_manche
+    exhaustion_effect = p_exhaustion_effect
+    expansion_effect = p_expansion_effect
 
     combo = 0
     last_succeed_move = 0
@@ -259,6 +290,11 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
 
     scores_constantes_modifiers_plus.clear()
     scores_constantes_modifiers_mult.clear()
+
+    benec_and_malec.clear()
+    if p_benec_and_malec :
+        for bm in benec_and_malec :
+            apply_benection_or_pacte(bm)
 
     game.clear()
     
@@ -279,8 +315,11 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
 
 #=========================== MOUVEMENT ============================*
 from collections import deque
+
+# La classe mouvement sert à calculer la position d'un objet en fonction du temps, de la vitesse, de la trajectoire, etc.
 class Movement() :
     def __init__(self, stack_position_memory = 50):
+        """Initialise un objet Movement. Le paramètre stack_position_memory détermine le nombre de positions précédentes à mémoriser pour le calcul des deltas"""
         
         self.mode = None 
         self.enable = False
@@ -340,6 +379,7 @@ class Movement() :
             raise ValueError("Vous avez indiqué des mauvais paramètre pour le mouvement")
     
     def start(self):
+        """Démarre ou reprend le mouvement"""
         if self.ended : return False
         if self.start_pause_time :
             time_in_pause = gtick() - self.start_pause_time
@@ -350,14 +390,17 @@ class Movement() :
         self.enable = True
 
     def pause(self):
+        """Met en pause le mouvement"""
         self.enable = False
         self.start_pause_time = gtick() 
     
     def end(self) :
+        """Termine le mouvement"""
         self.enable = False
         self.ended = True
     
     def restart(self) :
+        """Redémarre le mouvement depuis le début"""
         self.start_time = 0
         self.actual_coords = self.coords_start
         self.start_time = gtick()
@@ -365,6 +408,7 @@ class Movement() :
         self.enable = True
     
     def get_delta(self,from_time = 0) :
+
         if not from_time :
             return (self.actual_coords[0] - self.previous_coords[-1][0], self.actual_coords[1] - self.previous_coords[-1][1])
         else :
@@ -403,8 +447,11 @@ class Movement() :
 
 from pygame import Surface
 #========================= DISPLAYS ==========================#
+# --- CLASSE GRID ---
+# Permet de diviser une zone rectangulaire en une grille de cases, et de positionner des éléments dans ces cases facilement
 class grid() :
     def __init__(self, corner_left=(0,0), width=0, height=0, from_screen=False, rows = 8, cols = 8, square=False):
+        """Initialise une grille, soit à partir de la taille de l'écran (from_screen=True), soit à partir des paramètres corner_left, width et height."""
         self.follow_screen = from_screen
         self.corner_left = from_screen and (0,0) or corner_left
         self.init_corner_left = from_screen and (0,0) or corner_left
@@ -418,23 +465,23 @@ class grid() :
         self.cols = cols
         self.last_place = {}
 
-        if self.square :
-            a_square_size = min(self.width/self.cols, self.height/self.rows)
-            self.width, self.height = (a_square_size*self.cols,a_square_size*self.rows)
+        if self.square : # ajuste la grille pour qu'elle soit carrée
+            a_square_size = min(self.width/self.cols, self.height/self.rows) # on prend la plus petite taille possible pour que ça rentre
+            self.width, self.height = (a_square_size*self.cols,a_square_size*self.rows) # on ajuste la taille de la grille
 
             init_x, init_y = self.init_corner_left
 
             x = init_x + round((self.init_width - self.width) / 2)
             y = init_y + round((self.init_height - self.height) / 2)
 
-            self.corner_left = (x,y)
+            self.corner_left = (x,y) # on centre la grille dans la zone initiale
         
 
 
 
         self.top_stack = [None for _ in range(rows)]
 
-        self.save_size = None
+        self.saved_size = None
 
         try :
             grids.append(self)
@@ -559,7 +606,7 @@ class grid() :
             self.last_place.clear()
     
     def save_size(self) :
-        self.save_size = (self.width, self.height)
+        self.saved_size = (self.width, self.height)
 
     def add_from_top(self, e,  element_height = 1, element_width=1, col=None, marging=0) :
         if col == None : col=self.cols/2
@@ -573,18 +620,6 @@ class grid() :
         return self.create_rect_info(dispo,col, element_width, element_height, marging )
     
     def draw(self, surface, epaisseur=1, color=(0,0,0)):
-
-        # if self.square :
-        #     x,y,w,h = self.my_rect_info()
-        #     xi, yi = self.init_corner_left
-        #     wi, hi = self.init_width, self.init_height
-        #     self.update_width_height(wi,hi,(xi,yi))
-        #     self.square = False
-        #     self.draw(surface, epaisseur, color=tuple((255-i) for i in color))
-        #     self.update_width_height(w,h,(x,y))
-        #     self.square = True
-
-
 
         # lignes horizontales
         for row in range(self.rows + 1):
@@ -608,7 +643,7 @@ class grid() :
 
     
 
-
+# Initialisation de la grille 10x10 globale (qui peut être utilisée partout)
 global_grid = grid(from_screen=True, rows=10, cols=10)
 
 
@@ -633,6 +668,11 @@ def bonus_score(action, extravar=None) :
             if not any(name for name,_,__ in enclenched_effect):
                 add_show_effect("Chat_De_Compagnie")
             base += 5
+    
+    if action in ("add_tag") :
+        tag, self, from_ = extravar
+        if benit := self.get_tag('benit') :
+            base += tag[1] * (1+(benit[1]//2)) # On ajoute le produit des niveaux entre le tag ajouté et le tag bénit
 
     
     return int(base)
@@ -842,8 +882,16 @@ class Card:
             self.dziited, self.dziit_progress = False, 0
             try : self.stack_color_modifiers.remove(COLORS_MODIFIERS["dzzit"])
             except : None
+    
+    def put_tag_to_selection(self, tag, selection, message="", all_cards=None, message_color=(255,255,255)) :
+        card_modified = []
+        for card in selection :
+                        if card != self :
+                            try_put = card.put_tag(tag, all_cards, from_=[self])
+                            if try_put : card_modified.append(card)
+        if card_modified : pop_up(card_modified, message, all_cards, message_color=message_color,font=pop_up_font)
         
-    def put_tag(self, tag, all_cards, from_=None,   piouchador_break=False) :
+    def put_tag(self, tag, all_cards, from_=None, piouchador_break=False) :
         if from_ and not piouchador_break and self.name == "Piouchador" and (lvl:=fighters_lvl.get("Piouchador",0)) :
             reussite = []
             for troupe in from_ :
@@ -853,9 +901,9 @@ class Card:
                 pop_up([self], "Contré !", all_cards, message_color=(255,0,0),time= 500)
                 pop_up(reussite, f"Reçu !", all_cards, tag[2], time=500)
             return False
-
-
-
+        
+        tag = (tag[0], tag[1] + exhaustion_effect, tag[2])
+        add_score("add_tag", extravar=(tag,self, from_))
         remove_tags = set()
         for tag_ in self.tags :
             if tag_[0] == tag[0] :
@@ -863,8 +911,6 @@ class Card:
                     return False
                 else :
                     remove_tags.add(tag_)
-        
-        add_score("add_tag", extravar=tag)
 
         for tag_r in remove_tags :
             self.delete_tag(tag_r)
@@ -996,7 +1042,7 @@ class Card:
                             if other_guys :
                                 wait_with_cards(cards,100)
                                 switch_place(self, other := seed_choice(other_guys, event_name="catchy_where_jump"), cards, 100+100*distance(self,other), "ET HOP !!", message_color=(255,80,210), font=big, me=[self])
-                                add_eclat((lvl+6)//2)
+                                add_eclat((lvl+6))
                 
                 case "Bubble_Man" :
                     cards_bubbled = []
@@ -1048,6 +1094,80 @@ class Card:
                         if combo>1 : 
                             add_score(combo*(1+(lvl//2)))
                             pop_up([self], f"+ {combo} x {lvl} !", cards, (255,120,30), pop_up_font, time=800)
+                
+                case "Lori_Et_Les_Boaobs" :
+
+                    if nb_match == 0 :
+                        cards_loried_heal = []
+                        cards_loried_poisoned = []
+
+                        for card in selection :
+                            if card != self :
+                                if est_adjacent(self, card, 1) :
+                                    try_put = card.put_tag(("soin", (lvl+1), (255,120,120)), cards, from_=[self])
+                                    if try_put : cards_loried_heal.append(card)
+                                else :
+                                    try_put = card.put_tag(("poison",(lvl+1)//2,(160,10,160)), cards, from_=[self])
+                                    if try_put : cards_loried_poisoned.append(card)
+                        if cards_loried_heal : pop_up(cards_loried_heal, "Soigné !", cards, message_color=(0,255,150),font=pop_up_font)
+                        if cards_loried_poisoned : pop_up(cards_loried_poisoned, "Empoisonné !", cards, message_color=(160,10,160),font=pop_up_font)
+
+                    if lvl >= 3 and nb_match>0 and not "Lori_Et_Les_Boaobs" in already_done:
+                        already_poisoned_cards = []
+                        converting_cards = []
+                        points = 0
+                        for card in cards :
+                            if not card.remove :
+                                if poison := card.get_tag("poison") :
+                                    already_poisoned_cards.append((card, poison))
+                        if already_poisoned_cards :
+                            for card, poison in already_poisoned_cards :
+                                card.delete_tag(poison)
+                                success = card.put_tag(("soin", poison[1], (255,120,120)), cards, from_=[self])
+                                points += poison[1]
+                                if success :
+                                    converting_cards.append(card)
+                            if converting_cards :
+                                add_score(points*((lvl+3)//5))
+                                pop_up(converting_cards, "Reconvertie !", cards, (0,255,150))
+
+
+                        already_done.append("Lori_Et_Les_Boaobs")
+                
+                case "Celeste" :
+                    card_celeste = []
+                    celeste_cards = []
+                    for card in selection :
+                        if card != self and ca_match(card, self) :
+                            celeste_cards.append(card)
+                    if nb_match>0 and not "Celeste" in already_done: 
+                        for card in not_removed_cards(cards) :
+                            if card != self and any(est_adjacent(cel, card, 1) for cel in [self]+celeste_cards) and not card.flipped :
+                                if get_random("celeste") <= (lvl)/(lvl+2) :
+                                    card_celeste.append(card)
+                        if card_celeste :
+                            for card in card_celeste :
+                                card.put_tag(("benit", lvl, (255,255,0)), cards, from_=[self]+celeste_cards)
+                            small_reveal(card_celeste, cards, "Bénédiction !", message_color=(255,255,0),font=font, time=showing_time, me=[self]+celeste_cards)
+                        
+                        already_done.append("Celeste")
+                
+                case "Bossu Etoile" :
+                    bossu_effect = []
+                    for card in selection :
+                        if card != self and ca_match(card, self) :
+                            bossu_effect.append(card)
+                    if nb_match>0 and not "Bossu Etoile" in already_done:
+                        card_starified = []
+                        for card in not_removed_cards(cards) :
+                            if not card.flipped and get_random("bossu_etoile") < (lvl)/(lvl+7) :
+                                card_starified.append(card)
+                        if card_starified :
+                            for card in card_starified :
+                                card.put_tag(("benit", lvl, (255,255,0)), cards, from_=[self]+bossu_effect)
+                                card.dzzit()
+                            small_reveal(card_starified, cards, "Étoilé !", message_color=(255,255,50),font=font, time=showing_time*min(2,(1 + (len(card_starified)/10))), me=[self]+bossu_effect)
+                        already_done.append("Bossu Etoile")
 
 
 
@@ -1634,7 +1754,7 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
                 for tag in all_tags :
                     tag_upgrade = (tag[0], tag[1]+max(0,pipette_lvl-1), tag[2])
                     for card in cards :
-                        try_put = card.put_tag(tag_upgrade, cards, me)
+                        try_put = card.put_tag(tag_upgrade, all_cards, me)
                         if try_put and card not in card_enhanced : card_enhanced.append(card)
               
                 if card_enhanced :
@@ -1727,8 +1847,8 @@ def activate_object_effect(objet, lvl, cards, start_of_round_effect=False) :
         global charge 
         if charge >= 9 :
             add_show_effect("Canon_A_Energie", (200+lvl*50)*((charge//9)))
-            wait_with_cards(cards, 200)
         while charge >= 9 :
+            wait_with_cards(cards, 200)
             charge = max(0,charge-9)
             col = random_cols(cards, lvl>=3 and lvl/3)
             add_score(2*len(col))
@@ -1760,6 +1880,8 @@ def distance(card1, card2) :
 def est_adjacent(card1,card2, radius=1) :
     if (card2.name=="Maniak" and fighters_lvl.get("Maniak",0)) : return True 
     elif (card1.name=="Maniak" and fighters_lvl.get("Maniak",0)>3) : radius += fighters_lvl.get("Maniak",0)//3
+
+    radius += expansion_effect
 
 
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
@@ -1812,10 +1934,9 @@ def play_memory(num_pairs=8, forced_cards = None):
     cards : list["Card"]
 
     
-    taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
-    bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
-    playing_field, cards, cols, rows = create_board(num_pairs,bords[0],bords[1],taille,taille,forced_pairs=forced_cards)
-    player_score[0]
+    taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8)) # de carte
+    bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2 # position du plateau
+    playing_field, cards, cols, rows = create_board(num_pairs,bords[0],bords[1],taille,taille,forced_pairs=forced_cards) # créer les cartes nécessaires
     last_selection_time = 0
     running = True
     start_show_time = 0
@@ -1835,8 +1956,7 @@ def play_memory(num_pairs=8, forced_cards = None):
 
 
         draw_bg()
-        
-        
+
 
 
         # événements
@@ -1846,12 +1966,12 @@ def play_memory(num_pairs=8, forced_cards = None):
 
             if event.type == pygame.VIDEORESIZE :
                 
-                # print(bords)
+                # On remodifie dynamicament le plateau de jeu
                 taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8))
                 bords = SCREEN_WIDTH//2 - taille//2, SCREEN_HEIGHT//2 - taille//2
                 playing_field.update_width_height(taille, taille, new_corner=(bords[0], bords[1]))
-                # print(playing_field.my_rect_info())
 
+                # on change la taille des cartes en conséquance
                 size = round(playing_field.col_size()*0.9)
                 margin = round(playing_field.col_size()*0.05)
                 for card in cards :
@@ -1862,20 +1982,21 @@ def play_memory(num_pairs=8, forced_cards = None):
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            elif validation(event) and ending :
+
+            elif validation(event) and ending : # ending signifie que toute les paires ont étées trouvées ou que le joueur a perdu
                 running = False 
                 break
 
             elif acceleration(event) and start_show_time :
-                start_show_time -= showing_time/2
+                start_show_time -= showing_time/2 # raccourcie les animations de révélation
                 break
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if not selection_locked :
                     if getattr(event, "button", None) == 2 : # touche de pré-selection (clique molette)
                         for card in cards:
-                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and (card not in selection):
-                                if card.selected :
+                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and (card not in selection): # on vérifie que la carte est cliquée et qu'elle n'est pas déjà retirée / révélée
+                                if card.selected : # si la carte est déjà sélectionnée (sans avoir été retournée), on la désélectionne 
                                     card.selected = False
                                     selection.remove(card)
                                 elif len(selection) < SELECTION_LIMIT:
@@ -1885,7 +2006,7 @@ def play_memory(num_pairs=8, forced_cards = None):
                     
                     if getattr(event, "button", None) == 3 : # touche de déselection (clique droit)
                         for card in cards:
-                            if not card.flipped and not card.remove and card.selected:
+                            if not card.flipped and not card.remove and card.selected: # on vérifie que la carte est cliquée et qu'elle n'est pas déjà retirée / révélée
                                 if card.selected :
                                     card.selected = False
                                     selection.remove(card)
@@ -1907,7 +2028,7 @@ def play_memory(num_pairs=8, forced_cards = None):
         for card in cards:
             card.update()
 
-        
+        # effets de début de manche
         if not first_move_effect :
             first_move_effect = True
 
@@ -1916,8 +2037,8 @@ def play_memory(num_pairs=8, forced_cards = None):
 
 
         # logique du jeu
-        if len(selection) == SELECTION_LIMIT:
-            selection_locked = True
+        if len(selection) == SELECTION_LIMIT: # on a sélectionné le nombre maximum de cartes
+            selection_locked = True # on bloque la sélection pour éviter d'en sélectionner d'autres pendant l'animation
             for card in selection :
                 card.flipped=True
 
@@ -1925,15 +2046,13 @@ def play_memory(num_pairs=8, forced_cards = None):
             if all(card.flip_progress==1 for card in selection):
 
                 selection_locked = True
-
-                
                 
 
                 if not start_show_time :
-                    start_show_time = pygame.time.get_ticks()
+                    start_show_time = pygame.time.get_ticks() # on lance le timer d'affichage
 
                     names = [t.name for t in selection]
-                    if any(names.count(card.name)> 1 for name in names) :
+                    if any(names.count(name)> 1 for name in names) :
                         combo = combo + 1
                     else :
                         if fighters_lvl.get("Felinfeu",0) >= 4 and any(card.name=="Felinfeu" for card in selection) :
@@ -1941,36 +2060,38 @@ def play_memory(num_pairs=8, forced_cards = None):
                         else :
                             combo = 0
                     
-                    activate_effect(selection, cards, nb_move=move)
+                    activate_effect(selection, cards, nb_move=move) # appelle les effets des cartes sélectionnées
                 
-                elif pygame.time.get_ticks() - start_show_time > showing_time :
+                elif pygame.time.get_ticks() - start_show_time > showing_time : # apres avoir attendu le temps d'affichage, on ajoute le score et on retire ou retourne les cartes
                     names = [t.name for t in selection]
-                    if any(names.count(name)>1 for name in names):
+                    if any(names.count(name)>1 for name in names): # = un match a lieu
                         
-                        last_succeed_move = move
+                        last_succeed_move = move # dernier mouvement réussis
                         add_score("match")
 
-                        for c in selection:
+                        for c in selection: # On marque les cartes comme appariées et on les retire
                             c.matched = True
                             c.flipped = False
                             c.remove = True
                     else:
-                        add_lives(-1, from_ = selection, all_cards=cards)
-                        add_score("dontmatch")
-                        for c in selection:
+                        add_lives(-1, from_ = selection, all_cards=cards) # perte de vie si pas de match
+                        add_score("dontmatch") 
+                        for c in selection: # on retourne les cartes
                             c.flipped = False
 
-                    
+                    # dans tous les cas, on les déselectionnent
                     for card in cards :
                         card.selected = False
                     
                     for card in cards :
                         card.check_modification(move)
                     
-                    wait_finish_return(cards)
+                    wait_finish_return(cards) # On attends qu'elles soit bien retournées / retirées
 
-                    for o, lvl in objects_lvl.items() :
+                    for o, lvl in objects_lvl.items() : # on active les effets des objets
                         activate_object_effect(o,lvl, cards)
+
+                    # on prépare le prochain tour
                     
                     last_selection.clear()
                     last_selection.extend(selection)
@@ -2017,6 +2138,7 @@ def play_memory(num_pairs=8, forced_cards = None):
         update_clock()
 
 def get_apparition_cards() :
+    """Renvoit la liste des cartes qui apparaitrons spontannément"""
     res = []
     for name, prob in apparation_probability.items() :
         if get_random("apparation") <= prob :
@@ -2028,15 +2150,18 @@ def refresh() :
     draw_bg()
 
 def get_next_prob(current_prob) :
+    """Permet de définir le bonus de probabilité d'apparition lors d'une proposition"""
     return (0.2 if current_prob==0 else current_prob + 0.1) + random.randint(0,10)/100
 
 def proposal(card_name, from_bonus = False) :
+    """Génère une proposition de contrat avec un personnage mis en entré (mettez seulement son nom).
+    from_bonus : indique si la proposition vient d'un bonus d'objet ou non (impacte l'affichage et le comportement)"""
+
     global selection_locked
     selection.clear()
     from description import generer_apparition_message, generer_message_de_description
     selection_locked = False
     
-    # Create and display the card in the center
     msg = render_multiline("Un combattant souhaite collaborer avec vous !", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
     
     card_display = Card(
@@ -2138,14 +2263,9 @@ def rejet(event):
     )
 
 def get_bonus_lvl(name) :
-    if fighters_lvl.get(name,0) == 0 : return 1
+    if fighters_lvl.get(name,0) == 0 : return 1 + benec_and_malec.count('default_malec')
     nb = get_random("bonus_lvl")
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
-
-
-
-
-
 
 def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, message_color = (255,255,255), font=font, me : None|list[Card]=None):
     assert card1 in all_cards and card2 in all_cards
@@ -3119,9 +3239,200 @@ def lvl_rain(num_pairs=8, forced_cards = None):
         
         update_clock()
 
+def benediction_ou_pacte() :
+    ## Proposer au joueur de choisir entre une bénédiction (1 effet aléatoire puissant) ou un pacte (1 effet aléatoire très puissant mais avec un effet néfaste derrière)
+    global selection_locked
+    selection.clear()
+    from description import generer_apparition_message, generer_message_de_description
+    selection_locked = False
     
+    proposition = render_multiline("Deux voies s'offrent à vous ! Récupérer la bénédiction de Mère Féline, ou signer un pacte avec le culte de l'Ombre...", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
+    benec = render_multiline("La Bénédiction de Mère Féline : acceptez son généreux cadeau", width= global_grid.col_size(4*0.9), height=global_grid.row_size(1), bold=False, color=(255, 255, 100))
+    malec = render_multiline("Un puissant pacte ! Cet effet dévastateur pourrait bien caché un sombre maléfice...", width= global_grid.col_size(4*0.9), height=global_grid.row_size(1), bold=False, color=(150, 50, 50))
+
+
+    benec_name = seed_choice(all_benec, "benediction_choice")
+    malec_name = seed_choice(all_malec, "pacte_choice")
+    malec_name_malus = seed_choice(all_malus, "pacte_malus_choice")
+
+    card_benec = Card(
+        max(0,SCREEN_WIDTH//4 - (size:=global_grid.min_size(2))//2), global_grid.coords(1,5)[1],
+        benec_name,
+        all_belec_malec_dict[benec_name],
+        (255, 150, 150),
+        size,
+        location="benediction_or_pacte"
+    )
+
+    card_benec.flipped = True
+
+    card_malec = Card(
+        max(size,SCREEN_WIDTH - SCREEN_WIDTH//4 - size//2), global_grid.coords(1,5)[1],
+        malec_name,
+        all_belec_malec_dict[malec_name],
+        (255, 150, 150),
+        size,
+        location="benediction_or_pacte"
+    )
+
+    # card_malec_malus = Card(
+    #     int(max(size*1.2,SCREEN_WIDTH //2 - size*1.2//2)), global_grid.coords(1,5)[1],
+    #     malec_name,
+    #     all_belec_malec_dict[malec_name_malus],
+    #     (255, 150, 150),
+    #     int(size*1.2),
+    #     location="benediction_or_pacte"
+    # )
+
+    card_malec.flipped = True
+
+
+    description_surface_benec = generer_message_de_description(
+        {"nom": benec_name,
+         "for_benec_or_malec": True},
+         width=global_grid.col_size(4), height=global_grid.row_size(2), for_benec=True)
+    
+    description_surface_malec = generer_message_de_description(
+        {"nom": malec_name,
+        "for_benec_or_malec": True},
+        width=global_grid.col_size(4), height=global_grid.row_size(2), for_benec=True)
+    
+    waiting = True
+    
+    while waiting:
+        refresh()
+
+        screen.blit(benec, global_grid.place(benec, 1, 3, 4, 1))
+        screen.blit(malec, global_grid.place(malec, 5, 3, 4, 1))
+
+        screen.blit(proposition, global_grid.place(proposition, 2, 1, 6, 1))
+        if description_surface_benec :
+            screen.blit(description_surface_benec, global_grid.place(description_surface_benec, 1,7,4,2))
+        
+        if description_surface_malec :
+            screen.blit(description_surface_malec, global_grid.place(description_surface_malec, 5,7,4,2))
+        
+        update_draw_eclats()
+        update_draw_cards([card_benec, card_malec])
+        # update_draw_score(player_score, player_lives)
+  
+        for event in pygame.event.get():
+            check_resize(event)
+            if event.type == pygame.VIDEORESIZE :
+                proposition = render_multiline("Deux voies s'offrent à vous ! Récupérer la bénédiction de Mère Féline, ou signer un pacte avec le culte de l'Ombre...", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(255, 255, 255))
+                benec = render_multiline("La Bénédiction de Mère Féline : acceptez son généreux cadeau", width= global_grid.col_size(4*0.9), height=global_grid.row_size(1), bold=False, color=(255, 255, 100))
+                malec = render_multiline("Un puissant pacte ! Cet effet dévastateur pourrait bien cacher un sombre maléfice...", width= global_grid.col_size(4*0.9), height=global_grid.row_size(1), bold=False, color=(150, 50, 50))
+
+                size = global_grid.min_size(2)
+                card_benec.change_size(size)
+                card_benec.change_coords(max(0,SCREEN_WIDTH//4 - (size:=global_grid.min_size(2))//2), global_grid.coords(1,5)[1])
+
+                card_malec.change_size(size)
+                card_malec.change_coords(max(size,SCREEN_WIDTH - SCREEN_WIDTH//4 - size//2), global_grid.coords(1,5)[1])
+
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif validation(event):
+                if card_benec.rect.collidepoint(pygame.mouse.get_pos()) :
+                    apply_benection_or_pacte(benec_name)
+                    waiting = False
+                elif card_malec.rect.collidepoint(pygame.mouse.get_pos()) :
+                    apply_benection_or_pacte(malec_name)
+                    waiting = False
+
+                     # Faire apparaitre un nouveau ecran temporaire avec l'effet du malus qui été jusque la caché
+                    show_malus_effect(malec_name_malus)
+                
+               
+
+
+
+            elif rejet(event) :
+                waiting = False
+        
+        update_clock()
+
+def show_malus_effect(malus_name) :
+
+    from description import generer_message_de_description
+    description_surface_malus = generer_message_de_description(
+        {"nom": malus_name,
+        "for_benec_or_malec": True},
+        width=global_grid.col_size(6), height=global_grid.row_size(3), for_benec=True)
+    
+    # On affiche également une carte
+    card_malus = Card(
+        max(0,SCREEN_WIDTH//2 - (size:=global_grid.min_size(2))//2), global_grid.coords(1,2)[1],
+        malus_name,
+        all_belec_malec_dict[malus_name],
+        (255, 150, 150),
+        size,
+        location="benediction_or_pacte")
+    card_malus.flipped = True
 
     
+    waiting = True
+
+    msg = render_multiline("Il été écrit en tout petit que vous subiriez aussi ceci... :", width= global_grid.col_size(8), height=global_grid.row_size(1), bold=True, color=(200, 50, 50))
+
+    while waiting :
+        refresh()
+
+        # representer la carte
+        update_draw_cards([card_malus])
+
+        screen.blit(msg, global_grid.place(msg, 1,1,8,1))
+        if description_surface_malus :
+            screen.blit(description_surface_malus, global_grid.place(description_surface_malus, 1,4,6,3))
+        
+        for event in pygame.event.get():
+            check_resize(event)
+            if event.type == pygame.VIDEORESIZE :
+                msg = render_multiline("Effet Néfaste du Pacte :", width= global_grid.col_size(6), height=global_grid.row_size(1), bold=True, color=(200, 50, 50))
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif validation(event) or rejet(event):
+                waiting = False
+                apply_benection_or_pacte(malus_name)
+        
+        update_clock()
+
+    
+def apply_benection_or_pacte(name_bonus):
+    if name_bonus :
+        match name_bonus :
+            case "default_benec":
+                global regain_PV_manche
+                regain_PV_manche += 2
+            
+            case "default_malec_malus" :
+                global max_player_live
+                max_player_live = max(1, max_player_live - 10)
+                if max_player_live > player_lives[0] :
+                    player_lives[0] = max_player_live
+            case "exhaustion_malec" :
+                global exhaustion_effect
+                exhaustion_effect += 2
+            case "expansion_malec" :
+                global expansion_effect
+                expansion_effect += 1
+            case "fier_entrainement_benec" :
+                global training_choices
+                training_choices += 1
+            case "gloire_benec" :
+                scores_constantes_modifiers_plus["match"] = scores_constantes_modifiers_plus.get("match",0) + 1
+            case "honte_malus" :
+                scores_constantes_modifiers_plus["match"] = scores_constantes_modifiers_plus.get("match",0) - 2
+            case "solitude_malus" :
+                for prob in apparation_probability :
+                    apparation_probability[prob] = apparation_probability[prob]/2
+                
+    
+    benec_and_malec.append(name_bonus)
+
+
 
 def do_next() :
     global selection_locked
@@ -3130,9 +3441,13 @@ def do_next() :
     memo_shopped = False
     while player_lives[0]>0 :
         move = 0
-        if game["round"]%10 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
+        if game["round"]%8 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
             selection_locked = False
             lvl_rain(forced_cards=get_apparition_cards())
+        
+        if game["round"]%10 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
+            selection_locked = False
+            benediction_ou_pacte()
 
         if game["round"]%2==0 and not memo_shopped and (not "proposal" in game["state"]):
             game["state"]="memo_shop"
@@ -3215,8 +3530,8 @@ if __name__ == "__main__":
     #     add_object(o)
 
     start_run(**run_parameter)
-    # apparation_probability["Piquante"]=1
-    # fighters_lvl["Lo"]=7
+    # apparation_probability["Lori_Et_Les_Boaobs"]=1
+    # fighters_lvl["Lori_Et_Les_Boaobs"]=7
     # apparation_probability["Lo"]=1
     # fighters_lvl["Lo"]=4
     # run_seed="m"
@@ -3226,10 +3541,9 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-    # game["round"]=10
+    game["round"]=1
     # game["state"]="training"
 
-    
 
     while True :
         do_next()

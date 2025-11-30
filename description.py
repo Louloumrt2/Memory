@@ -56,9 +56,25 @@ upgrades = {
     "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False)),
     "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","", lambda a : (f"Les Bubble Mans inflige Englué {romain(lvll(a)+2)} aux cartes qui leurs sont adjacente en faisant un match" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False) ,"","[sub]Englué ", romainlvldesc,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre face cachée"),
     "Piouchador":("Quand il est sencé recevoir une marque provenant d'une autre troupe, vibre et renvoit la marque à ceux qui l'ont envoyé.","Cette marque est amélioré de ", lambda a : (lvll(a),False)," niveau."),
-    "Trognon":("Au début de chaque partie de memory, régénère ",lambda a : (lvll(a),False)," PV et applique la marque Poison ", romainlvl, " à ", lambda a : (1+(lvll(a)//2), False), " cartes en jeu","","[sub]Poison ", romainlvldesc, "[sub] : A chaque fois qu'un coup est joué, les cartes empoissonné ne matchant pas enlève ",lambda a : (lvll(a),True),"[sub] points et vibrent"),
+    "Trognon":("Au début de chaque partie de memory, régénère ",lambda a : (lvll(a),False)," PV et applique la marque Poison ", romainlvl, " à ", lambda a : (1+(lvll(a)//2), False), " cartes en jeu","","[sub]Poison ", romainlvldesc, "[sub] : A chaque fois qu'un coup est joué, les cartes empoissonné ne matchant pas enlève ",lambda a : (lvll(a),True),"[sub] points et vibrent. Le poison diminue chaque tour"),
     "Lo":("Quand iels sont matché.es, iels appliquent à toutes les troupes de leur lignes Barageau ",romainlvl,"","[sub]Barag'eau ",romainlvldesc, "[sub] : Les pertes de vie provoquées avec cette troupe ont ",lambda a : (f'{100*lvll(a)/(lvll(a)+4):.2f}',True),"[sub]% de chance de s'annuler. En s'activant, a ",lambda a : (f'{100*(40/(50+lvll(a))):.2f}',True), "[sub]% de chance de se détruire."),
-    "Felinfeu":("Génère ",lambda a : (1+(lvll(a)//2), False), " x [combo actuel] points en matchant.","", lambda a : (f"Un coup perdant qui contient Félinfeu ne remet plus le score à 0" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False))}
+    "Felinfeu":("Génère ",lambda a : (1+(lvll(a)//2), False), " x [combo actuel] points en matchant.","", lambda a : (f"Un coup perdant qui contient Félinfeu ne remet plus le score à 0" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False)),
+    "Lori_Et_Les_Boaobs":("Si ils sont joués sans produire un match, applique Soin ", lambda a : (romain(lvll(a)+1),False), " aux cartes jouées avec lui si elles sont adjacentes, ou Poison ",lambda a : (romain((lvll(a)+1)//2),False)," le cas échéant.","",lambda a : (f"En produisant un match, convertie toutes les marques de Poison en marque de Soin à durée égale, et génère [tours gueris]*{(lvll(a)+3)//5} points" if lvll(a) >= 3 else "un effet additionnel est disponible au niveau 3",True),"","[sub]Soin ", lambda a : (romain(lvll(a)+1),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda a : ((lvll(a)+1),True),"[sub] coups","","[sub]Poison ", lambda a : (romain((lvll(a)+1)//2),True), "[sub] : A chaque fois qu'un coup est joué, les cartes empoissonnées ne matchant pas enlèvent " ,lambda a : (((lvll(a)+1)//2),True),"[sub] points et vibrent. Le poison diminue chaque tour"),
+    "Celeste":("En produisant un match, elles ont ", lambda a : (f'{100*(lvll(a)/(2+lvll(a))):.2f}',False), "% de chance pour chaque carte adjacente de la révéller et d'appliquer Bénit ", lambda a : (romain(lvll(a)),False) ,"","[sub]Bénit ", lambda a : (romain(lvll(a)),True), "[sub] : quand une carte bénite reçoit une marque, elle génère [niveau de la marque] x ", lambda a : (((1+lvll(a)//2)),True), "[sub] points"),
+    "Bossu_Etoile":("Quand ils produisent un match, chaque carte non retournée a ", lambda a : (f'{100*(lvll(a)/(7+lvll(a))):.2f}',False), "% de chance de vibrer et d'obtenir Benit ", romainlvl,"","[sub]Bénit ", romainlvldesc, "[sub] : quand une carte bénite reçoit une marque, elle génère [niveau de la marque] x ", lambda a : (((1+lvll(a)//2)),True), "[sub] points"),}
+
+benedictions_maledictions = lambda args : ({
+     "default_benec": ("Vous obtenez définitivement +2 PV soignés à chaque fin de partie",),
+     "default_malec": ("Débloquer une compétence en entrainement améliorera le personnage d'un niveau supplémentaire",),
+     "default_malec_malus":("Vous perdez 10 PV MAX définitivement",),
+     "gloire_benec": ("Chaque match vous rapporte +1 point supplémentaire",),
+    "expansion_malec": ("Améliore le rayon de proximité de tous les personnage de 1 case",),
+    "solitude_malus": ("Divise par 2 toutes les probabilités d'apparitions spontannées actuelles",),
+    "honte_malus": ("Gagnez 2 points de moins par match définitivement",),
+    "exhaustion_malec": ("Améliore le niveau des marques infligés de 2 pour toute les marques",),
+    "fier_entrainement_benec": ("Vous avez 1 choix supplémentaire lors des entrainements",),
+}).get(args.get("nom",""))
+
 
 
 
@@ -124,7 +140,16 @@ DISPLAY_NAMES = {
     "Pipette_Elementaire":"Pipette Elémentaire",
     "Bouquet_Medicinal":"Bouquet Médicinal",
     "Chat_De_Compagnie":"Chat de Compagnie",
-    "Cheffe_Chauffocoeur":"Cheffe Chauffocoeur"
+    "Cheffe_Chauffocoeur":"Cheffe Chauffocoeur",
+    "default_benec":"Bénédiction de Guérison",
+    "default_malec":"Pacte de Puissace",
+    "default_malec_malus":"Sappage d'énergie",
+    "gloire_benec":"Bénédiction de la Gloire",
+    "expansion_malec":"Pacte d'Expansion",
+    "solitude_malus":"Isolement Eternel",
+    "honte_malus":"Honte Infinie",
+    "exhaustion_malec":"Pacte d'Exhaustion",
+    "fier_entrainement_benec":"Bénédiction de l'Entraînement Fier",
 }
 
 PRONOUNS = {
@@ -169,7 +194,10 @@ def entete(args) : # détermine le titre
     display_name = DISPLAY_NAMES.get(args.get("nom","..."), args.get("nom","..."))
     lvl = args.get("lvl",0)
 
-    if args.get("proposal", False) :
+    if args.get('for_benec_or_malec') :
+        text += ((f"Effet de "+display_name+" :"),)
+        text += ((""),)
+    elif args.get("proposal", False) :
         text += ((f"Compétence du personnage :{ ' (à débloquer dans la partie !)' if not lvl else '' }"),)
         text += ((""),)
     elif args.get("panel",False) :
@@ -285,14 +313,14 @@ def generer_message_via_tokens(tokens, width, height,):
         final_surface = final_surface.subsurface((0, 0, width, total_height))
     return final_surface
 
-def generer_message_de_description(args, width, height, green_value=(0, 255, 150)):
+def generer_message_de_description(args, width, height, green_value=(0, 255, 150), for_benec = False):
     if args.get('show_previous') : green_value = (180, 50, 200)
 
     nom = args.get("nom", "")
-    if nom not in upgrades:
+    if nom not in upgrades and not for_benec:
         return None
 
-    description = entete(args) + upgrades[nom]
+    description = entete(args) + (not for_benec and upgrades[nom] or benedictions_maledictions(args) or ("Description indisponible.",))
 
     # Construire une liste de "tokens" : {text, green, italic, jump}
     tokens = []
