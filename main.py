@@ -1882,7 +1882,7 @@ def est_adjacent(card1,card2, radius=1) :
     if (card2.name=="Maniak" and fighters_lvl.get("Maniak",0)) : return True 
     elif (card1.name=="Maniak" and fighters_lvl.get("Maniak",0)>3) : radius += fighters_lvl.get("Maniak",0)//3
 
-    radius_ligne = expansion_effect
+    radius += expansion_effect
 
 
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
