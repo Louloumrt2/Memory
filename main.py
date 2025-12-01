@@ -78,7 +78,7 @@ UPGRADES_COST = {
     "Catchy":4,
     "Bubble_Man":2,
     "Piouchador":4,
-    "Lo" : 6,
+    "Lo" : 4,
     "Felinfeu":5,
     "Lori_Et_Les_Boaobs":3,
     "Celeste":5,
@@ -227,6 +227,7 @@ eclat = [10,0,0] # comme pour player_lives
 regain_PV_manche = 2 # gain de PV à chaque manche
 exhaustion_effect = 0
 expansion_effect = 0
+gain_eclat_bonus_manche = 1
 
 combo = 0 # nombre de match consécutif (se réinitialise en cas de paires sans match)
 last_succeed_move = 0 # numero du dernier mouvement réussi (pour le combo)
@@ -246,8 +247,8 @@ scores_constantes_modifiers_mult = {}
 benec_and_malec = []
 
 # lance une run. Utilisez run_parameter pour lancer une run selon des conditions précises
-def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3, p_benec_and_malec = None, p_exhaustion_effect=0, p_expansion_effect=0, seed_input=None) :
-    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live, exhaustion_effect, expansion_effect
+def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3, p_benec_and_malec = None, p_exhaustion_effect=0, p_expansion_effect=0, seed_input=None, p_gain_eclat_bonus_manche=1) :
+    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live, exhaustion_effect, expansion_effect, gain_eclat_bonus_manche
     
     last_score_change_tick = pygame.time.get_ticks()
     last_live_change_tick = pygame.time.get_ticks()
@@ -287,6 +288,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     shop_choices = p_shop_choices
     bonus_lvl_probabilities.clear()
     bonus_lvl_probabilities.extend([0.3]+[0.2**i for i in range(1,10)])
+    gain_eclat_bonus_manche = p_gain_eclat_bonus_manche
 
     scores_constantes_modifiers_plus.clear()
     scores_constantes_modifiers_mult.clear()
@@ -988,7 +990,7 @@ class Card:
                         if cards_soignee :
                             card_success = []
                             for card in cards_soignee :
-                                try_put = card.put_tag(("soin", (lvl+2)//2, (255,120,120)), cards, from_=flosette_effect) # On tente d'appliquer le tag
+                                try_put = card.put_tag(("soin", 2+((lvl)//2), (255,120,120)), cards, from_=flosette_effect) # On tente d'appliquer le tag
                                 if try_put : card_success.append(card)
                             if card_success :
                                 pop_up(card_success, "Soin !", cards, (255,100,100))
@@ -1152,7 +1154,7 @@ class Card:
                         
                         already_done.append("Celeste")
                 
-                case "Bossu Etoile" :
+                case "Bossu_Etoile" :
                     bossu_effect = []
                     for card in selection :
                         if card != self and ca_match(card, self) :
@@ -1384,8 +1386,8 @@ def create_board(num_pairs, x, y, width, height,  forced_pairs = None, only_lvl_
 
     total_cards = num_pairs * 2
 
-    cols = int(math.sqrt(total_cards))
-    rows = math.ceil(total_cards / cols)
+    rows = int(math.sqrt(total_cards))
+    cols = math.ceil(total_cards / rows)
     playing_field = grid((x,y), width, height, cols=cols, rows=rows,square=True)
 
     if only_lvl_up_disponible :
@@ -1573,7 +1575,7 @@ def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None
         for troupe in from_ :
             troupe_act = troupe
             tag = not troupe.break_barageau and troupe.get_tag("barageau")
-            if tag and (get_random("barageau") < (tag[1]/tag[1]+4)) :
+            if tag and (get_random("barageau") < (tag[1]/(tag[1]+4))) :
                 tanked = True
                 tag_break = get_random("barageau_break") < (max(0.25,40/(50+tag[1])))
                 break
@@ -1601,7 +1603,7 @@ def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None
         add_show_effect("Lame_Sadique")
     
     if (lvl_chat_comp := objects_lvl.get("Chat_De_Compagnie",0)) and ch>0 : 
-        if get_random("chat_de_compagnie") < (lvl_chat_comp / lvl_chat_comp+9) :
+        if get_random("chat_de_compagnie") < (lvl_chat_comp / (lvl_chat_comp+9)) :
             ch += 1
             add_show_effect("Chat_De_Compagnie")
     
@@ -1750,11 +1752,10 @@ def small_reveal(cards : list[Card], all_cards, message=None, message_color = (2
 
             if me and (pipette_lvl := objects_lvl.get("Pipette_Elementaire",0)) :
                 card_enhanced = []
-                all_tags = sorted(sum((list(troupe.tags) for troupe in me),start=[]), key= lambda t : t[1])
+                all_tags = sorted(sum((list(troupe.tags) for troupe in me),start=[]), key= lambda t : t[1], reverse=True)[:(pipette_lvl)]
                 for tag in all_tags :
-                    tag_upgrade = (tag[0], tag[1]+max(0,pipette_lvl-1), tag[2])
                     for card in cards :
-                        try_put = card.put_tag(tag_upgrade, all_cards, me)
+                        try_put = card.put_tag(tag, all_cards, me)
                         if try_put and card not in card_enhanced : card_enhanced.append(card)
               
                 if card_enhanced :
@@ -1881,7 +1882,7 @@ def est_adjacent(card1,card2, radius=1) :
     if (card2.name=="Maniak" and fighters_lvl.get("Maniak",0)) : return True 
     elif (card1.name=="Maniak" and fighters_lvl.get("Maniak",0)>3) : radius += fighters_lvl.get("Maniak",0)//3
 
-    radius += expansion_effect
+    radius_ligne = expansion_effect
 
 
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
@@ -1909,7 +1910,7 @@ def wait_finish_return(cards):
         update_clock()
 
 def get_end_of_round_eclat(cards):
-    return 3+int(1.5*game["round"])
+    return 3+int(1.5*game["round"]*gain_eclat_bonus_manche)
 
 def check_resize(event) :
     if event.type == pygame.VIDEORESIZE:
@@ -3253,7 +3254,7 @@ def benediction_ou_pacte() :
 
     benec_name = seed_choice(all_benec, "benediction_choice")
     malec_name = seed_choice(all_malec, "pacte_choice")
-    malec_name_malus = seed_choice(all_malus, "pacte_malus_choice")
+    malec_name_malus = seed_choice([malus for malus in all_malus if malus!="solitude_malus" or sum(apparation_probability)>0.8], "pacte_malus_choice")
 
     card_benec = Card(
         max(0,SCREEN_WIDTH//4 - (size:=global_grid.min_size(2))//2), global_grid.coords(1,5)[1],
@@ -3428,6 +3429,9 @@ def apply_benection_or_pacte(name_bonus):
             case "solitude_malus" :
                 for prob in apparation_probability :
                     apparation_probability[prob] = apparation_probability[prob]/2
+            case "trou_malus" :
+                global gain_eclat_bonus_manche 
+                gain_eclat_bonus_manche * 0.8
                 
     
     benec_and_malec.append(name_bonus)
@@ -3441,11 +3445,11 @@ def do_next() :
     memo_shopped = False
     while player_lives[0]>0 :
         move = 0
-        if game["round"]%8 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
+        if game["round"]%8 == 0 and game["state"]=="play": # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
             selection_locked = False
             lvl_rain(forced_cards=get_apparition_cards())
         
-        if game["round"]%10 == 0 and game["state"]=="play" and game["round"]: # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
+        if (game["round"]+5)%10 == 0 and game["state"]=="play": # dernier element car pour l'instant la pluie est soft_lock à la deuxieme occurence
             selection_locked = False
             benediction_ou_pacte()
 
@@ -3457,7 +3461,7 @@ def do_next() :
             switch_bg_to(BG_COLORS["play"])
 
             selection_locked = False
-            play_memory(num_pairs= 2+(game["round"]//2), forced_cards=get_apparition_cards())
+            play_memory(num_pairs= 2+((game["round"]+1)//3), forced_cards=get_apparition_cards())
 
             memo_shopped = False
 
@@ -3541,7 +3545,7 @@ if __name__ == "__main__":
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-    game["round"]=1
+
     # game["state"]="training"
 
 

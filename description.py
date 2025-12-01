@@ -37,13 +37,13 @@ upgrades = {
     "8_Volt" : ("Quand elle est jouée, elle fait vibrer les autres 8-Volt sur un rayon de ", lambda args: (args.get('lvl', 1),False), " autour d'elle"),
     "Michel" : ("Applique la marque michel aux cartes jouées avec lui.","","[sub]michel : pour chaque carte adjacente, vous avez ", lambda args: (args.get('lvl', 1), True), "[sub] chance sur ",lambda args: (args.get('lvl', 1) + 3, True),"[sub] de la réveller pour 0.4 + ", lambda args: (args.get('lvl', 1) * 0.15,True), "[sub] secondes"),
     "Max" : ("Quand ils sont matchés,",lambda args: (" révèlent la première et dernière carte de chaque ligne avec un Max (cette effet peut s'améliorer au niveau 3)" if args.get('lvl',1)<3 else f"révèlent les {args.get('lvl',1)//3+1} premières et dernières carte de chaque ligne avec un Max", False), ""),
-    "Flosette" : ("Quand elles sont matchées, elles appliquent la marque Soin ",lambda args: (romain((args.get('lvl',2)+2)//2), False)," aux cartes","","dans un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain((args.get('lvl',2)+2)//2),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: ((args.get('lvl',2)+2)//2,True),"[sub] coups"),
+    "Flosette" : ("Quand elles sont matchées, elles appliquent la marque Soin ",lambda args: (romain((args.get('lvl',2)+4)//2), False)," aux cartes","","dans un rayon de ", lambda args: (math.ceil(math.sqrt(args.get('lvl',1))),False)," autour d'elles","","[sub]Soin ", lambda args: (romain((args.get('lvl',2)+2)//2),True), "[sub] : régènère 1PV en produisant un match. Reste ",lambda args: ((args.get('lvl',2)+2)//2,True),"[sub] coups"),
     "Le_Vrilleur" : ("Quand il est joué, il génère ",lambda args:(args.get('lvl',1)+2,False)," de score pour chaque carte non retournée adjacente"),
     "Lame_Sadique" : ("Effectuer un match offre ", lambda args: ('x'+str(1+(args.get('lvl',1)*0.5)),False)," points, mais chaque perte de vie est augmentée de ",lambda args:(1+(args.get('lvl',1)//4),False),"PV"),
     "Bulle_D_Eau" : ("Vous êtes invincible pendant ",lambda a : (f"vos {lvll(a)} premiers coups" if lvll(a)>1 else 'votre premier coup',False)," de chaque partie"),
     "Reveil_Endormi" : (("A l'achat, augmente définitivement de 0.3 secondes le temps d'affichage des cartes jouées"),),
     "Allumette": ("Quand vous enchaînez les matchs, vous gagnez ",lambda args : (2+args.get('lvl',1),False)," points par match consécutif","","[sub]Exemple : votre 4 réussite d'affilé offrira ",lambda args : (2+args.get('lvl',1),True),"[sub]x4 points"),
-    "Pipette_Elementaire": ("Quand une de vos cartes en révèle une autre, elle copie toutes ses marques à la carte révélée",lambda args : (f"Les marques copiées sont améliorées ( +{args.get('lvl',1) - 1})", False) if args.get('lvl',1)<=1 else ("(Un effet supplémentaire est révélé au niveau 2)",True)),
+    "Pipette_Elementaire": ("Quand des personnages effectuent une révélation, ils appliquent une copie ",lambda a : (f"{('de la plus forte ' if lvll(a)<2 else 'des '+lvll(a)+' plus fortes') } marque(s) présente sur eux aux personnages révélés.", False)),
     "Tireur_Pro": ("Applique la marque Ciblé aux cartes jouées avec lui.","","[sub]Ciblé : la carte vibre si elle est de dos pendant que une carte identique est jouée sur une distance de ",lambda args:(args.get('lvl',1)+1,True),"[sub] cases"),
     "Piquante": ("Si elle est jouée sans qu'elle produise un match, vous perdez ",lambda args:(1 + args.get('lvl',1)//3,False)," PV","","Sinon, vous gagnez les points de ",lambda args:(1 + args.get('lvl',1)//3,False)," match"),
     "Chat_De_Compagnie": ("Gagnez ", lambda args : (lvll(args), False)," points par soin gagné.","","Vous avez ",lambda a : (lvll(a),False)," chance sur ",lambda a : (lvll(a)+9,False)," d'améliorer chaque soin subis de 1 PV"),
@@ -51,7 +51,7 @@ upgrades = {
     "Canon_A_Energie": ("Génère un rayon révellant toutes les cartes d'une colonne toute les 9 vibrations de carte effectuées.","","La révélation dure ",lambda a : ((200+100*lvll(a))/1000, False), " secondes et génère ",lambda a : (2*lvll(a), False)," points par carte révélée.","",lambda a : (f"La sélection de la colonne ciblée {'très '*((lvll(a)//3)-1)} est améliorée" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
     "Bouquet_Medicinal":("A l'achat, vous guerris ",lambda a : (lvll(a)*5,False), "PV instantannément"),
     "Maniak":("Maniak est considéré comme autour de toute les autres cartes en jeu.",lambda a : (f"Le rayon de proximité de Maniak est agrandis de {(lvll(a)//3)} case{'s' if (lvll(a)//3)>1 else ''}" if lvll(a)>=3 else "Une amélioration additionnelle est disponible au niveau 3", False)),
-    "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : (lvll(a)+1//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
+    "Mc_Cookie":("Quand ils sont matchés, chacun produit ",lambda a : ((lvll(a)+1)//2, False)," éclat(s) + ",lambda a: (lvll(a)//2, False)," éclat(s) par marque placé sur lui-même"),
     "Fantome_A_Cheveux":("Quand il est joué, il active toutes les compétences des personnages qui l'ont révélé dans cette manche","","[sub]La puissance de cette compétence ne dépassera pas le niveau ", lambda a : (lvll(a),True),"[sub].","","[sub]Les compétences copiées sont uniquement celles qui s'active en jouant la carte (exemple : passif de Maniak est exclu)"),
     "Catchy":("Quand il est joué, et que au moins 2 cartes sont adjacentes, en mélange 2 et génère ", lambda a : (2+lvll(a)*4,False)," points.","",lambda a : (f"A également 1 chance sur 4 d'échanger ensuite sa propre place avec une carte du jeu, en générant {(lvll(a)+6)//2} éclats" if lvll(a)>=5 else "Une amélioration additionnelle est disponible au niveau 5", False)),
     "Bubble_Man":("Applique la marque Englué ", romainlvl, " aux carte jouées avec lui.","", lambda a : (f"Les Bubble Mans inflige Englué {romain(lvll(a)+2)} aux cartes qui leurs sont adjacente en faisant un match" if lvll(a)>=4 else "Une amélioration additionnelle est disponible au niveau 4", False) ,"","[sub]Englué ", romainlvldesc,"[sub] : Annule les déplacements impliquant la carte englué. La carte a ",lambda a : ((l:=lvll(a)) == 1 and "un peu" or l==2 and "relativement" or l==3 and "plutôt bien" or l==4 and "vraiment" or l==5 and "beaucoup trop" or "extrêmement",True),"[sub] du mal à se remettre face cachée"),
@@ -73,6 +73,7 @@ benedictions_maledictions = lambda args : ({
     "honte_malus": ("Gagnez 2 points de moins par match définitivement",),
     "exhaustion_malec": ("Améliore le niveau des marques infligés de 2 pour toute les marques",),
     "fier_entrainement_benec": ("Vous avez 1 choix supplémentaire lors des entrainements",),
+    "trou_malus": ("Réduit de 20% le nombre d'éclats gagnés à la fin de chaque manche",),
 }).get(args.get("nom",""))
 
 
@@ -150,6 +151,7 @@ DISPLAY_NAMES = {
     "honte_malus":"Honte Infinie",
     "exhaustion_malec":"Pacte d'Exhaustion",
     "fier_entrainement_benec":"Bénédiction de l'Entraînement Fier",
+    "trou_malus":"Malediction des trous",
 }
 
 PRONOUNS = {
