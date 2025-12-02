@@ -39,6 +39,8 @@ SWITCH_BACKGROUND_SPEED = 1000
 accelere = False # quand vaut True, certaines annimations passent plus vite
 run_parameter = {} # Modifiers pour le lancement de la prochaine run
 last_proposal_accepted = None # deviendra la derniere carte accéptée dans une Proposition
+this_level_score = 0
+
 
 # SEED=1893894
 # random.seed(1893894)
@@ -238,6 +240,7 @@ training_choices = 3 # Nombre de choix en entrainement
 proposal_after_training_prob = 0.3 # Probabilité de créer une Proposition avec la carte entrainée
 shop_choices = 3 # Choix dans le memo_shop
 bonus_lvl_probabilities = [0.3]+[0.2**i for i in range(2,10)] # Les probabilités d'avoir un bonus de niveau 1,2,3,...
+increase_difficulty = 2.5
 
 # pas utilisés pour l'instant
 scores_constantes_modifiers_plus = {}
@@ -248,11 +251,12 @@ benec_and_malec = []
 
 # lance une run. Utilisez run_parameter pour lancer une run selon des conditions précises
 def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgrade_base=1, p_showing_time=1200, p_training_choices=3, p_proposal_after_training=0.3, p_shop_choices=3, p_benec_and_malec = None, p_exhaustion_effect=0, p_expansion_effect=0, seed_input=None, p_gain_eclat_bonus_manche=1) :
-    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live, exhaustion_effect, expansion_effect, gain_eclat_bonus_manche
+    global last_score_change_tick, last_live_change_tick, last_eclat_change_tick, selection_locked, selection_overload, showing_time, level_upgrade_base, regain_PV_manche, combo, last_succeed_move, move, charge, training_choices, proposal_after_training_prob, shop_choices, max_player_live, exhaustion_effect, expansion_effect, gain_eclat_bonus_manche,this_level_score
     
     last_score_change_tick = pygame.time.get_ticks()
     last_live_change_tick = pygame.time.get_ticks()
     last_eclat_change_tick = pygame.time.get_ticks()
+    this_level_score = 0
 
     # PLAYER INFO
 
@@ -814,6 +818,7 @@ class Card:
         self.matched = False
         self.flip_progress = 0
         self.remove = False
+        self.locked = False
         self.tags : set[tuple[str, int]] = set()
         
         self.selected = False
@@ -933,6 +938,9 @@ class Card:
                     return tag
             
         return None
+    
+    def set_lock(self,duration=1) :
+        self.locked = max(self.locked, duration)
 
     
     def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move, custom_name = None) :
@@ -1251,6 +1259,13 @@ class Card:
         
         self.delete_stack.clear()
         self.break_barageau = False
+
+
+        if self.locked :
+            self.locked -= 1
+            if self.locked <= 0 :
+                self.locked = 0
+        
                     
 
                             
@@ -1279,100 +1294,107 @@ class Card:
 
 
     def draw(self, surface):
-        if self.remove:
-            return      
-        
-        progress = abs(1 - 2 * self.flip_progress)
-        width = max(1, int(self.rect.width * (progress)))   
-        card_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)     
-        if self.flip_progress >= 0.5:
-            pygame.draw.rect(card_surface, (255, 255, 255), (0, 0, self.rect.width, self.rect.height), border_radius=10)
-            if self.tags:
-                num_tags = len(self.tags)
-                tag_colors = [tag[2] for tag in self.tags]
-                perimeter = 2 * (self.rect.width + self.rect.height)
-                segment_length = perimeter / num_tags
-                w = int(self.rect.width)
-                h = int(self.rect.height)
-                thickness = max(1, min(w, h) // 20)
+            if self.remove:
+                return      
+            
+            progress = abs(1 - 2 * self.flip_progress) if not self.locked else 1
+            width = max(1, int(self.rect.width * (progress)))   
+            card_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)     
+            if self.flip_progress >= 0.5 and not self.locked:
+                pygame.draw.rect(card_surface, (255, 255, 255), (0, 0, self.rect.width, self.rect.height), border_radius=10)
+                if self.tags:
+                    num_tags = len(self.tags)
+                    tag_colors = [tag[2] for tag in self.tags]
+                    perimeter = 2 * (self.rect.width + self.rect.height)
+                    segment_length = perimeter / num_tags
+                    w = int(self.rect.width)
+                    h = int(self.rect.height)
+                    thickness = max(1, min(w, h) // 20)
 
-                corners = [(0, 0), (w, 0), (w, h), (0, h), (0, 0)]
-                edges = [w, h, w, h]
+                    corners = [(0, 0), (w, 0), (w, h), (0, h), (0, 0)]
+                    edges = [w, h, w, h]
 
-                def pos_to_edge_offset(pos):
-                    pos = max(0, min(pos, perimeter))
-                    cum = 0
-                    for idx, length in enumerate(edges):
-                        if pos <= cum + length:
-                            return idx, pos - cum
-                        cum += length
-                    # fallback to last edge
-                    return 3, edges[3]
+                    def pos_to_edge_offset(pos):
+                        pos = max(0, min(pos, perimeter))
+                        cum = 0
+                        for idx, length in enumerate(edges):
+                            if pos <= cum + length:
+                                return idx, pos - cum
+                            cum += length
+                        # fallback to last edge
+                        return 3, edges[3]
 
-                def point_on_edge(edge_idx, offset):
-                    if edge_idx == 0:  # top
-                        return (int(offset), 0)
-                    if edge_idx == 1:  # right
-                        return (w, int(offset))
-                    if edge_idx == 2:  # bottom (goes right->left)
-                        return (int(w - offset), h)
-                    # edge_idx == 3 left (goes bottom->top)
-                    return (0, int(h - offset))
+                    def point_on_edge(edge_idx, offset):
+                        if edge_idx == 0:  # top
+                            return (int(offset), 0)
+                        if edge_idx == 1:  # right
+                            return (w, int(offset))
+                        if edge_idx == 2:  # bottom (goes right->left)
+                            return (int(w - offset), h)
+                        # edge_idx == 3 left (goes bottom->top)
+                        return (0, int(h - offset))
 
-                for i, color in enumerate(tag_colors):
-                    start_pos = int(i * segment_length)
-                    end_pos = int((i + 1) * segment_length)
-                    end_pos = min(end_pos, perimeter)
+                    for i, color in enumerate(tag_colors):
+                        start_pos = int(i * segment_length)
+                        end_pos = int((i + 1) * segment_length)
+                        end_pos = min(end_pos, perimeter)
 
-                    s_edge, s_off = pos_to_edge_offset(start_pos)
-                    e_edge, e_off = pos_to_edge_offset(end_pos)
+                        s_edge, s_off = pos_to_edge_offset(start_pos)
+                        e_edge, e_off = pos_to_edge_offset(end_pos)
 
-                    p_start = point_on_edge(s_edge, s_off)
-                    p_end = point_on_edge(e_edge, e_off)
+                        p_start = point_on_edge(s_edge, s_off)
+                        p_end = point_on_edge(e_edge, e_off)
 
-                    if s_edge == e_edge:
-                        pygame.draw.line(card_surface, color, p_start, p_end, thickness)
-                    else:
-                        # from start to its edge corner
-                        corner_after_start = corners[s_edge + 1]
-                        pygame.draw.line(card_surface, color, p_start, corner_after_start, thickness)
+                        if s_edge == e_edge:
+                            pygame.draw.line(card_surface, color, p_start, p_end, thickness)
+                        else:
+                            # from start to its edge corner
+                            corner_after_start = corners[s_edge + 1]
+                            pygame.draw.line(card_surface, color, p_start, corner_after_start, thickness)
 
-                        # full edges between start and end
-                        idx = s_edge + 1
-                        while idx <= e_edge - 1:
-                            c1 = corners[idx]
-                            c2 = corners[idx + 1]
-                            pygame.draw.line(card_surface, color, c1, c2, thickness)
-                            idx += 1
+                            # full edges between start and end
+                            idx = s_edge + 1
+                            while idx <= e_edge - 1:
+                                c1 = corners[idx]
+                                c2 = corners[idx + 1]
+                                pygame.draw.line(card_surface, color, c1, c2, thickness)
+                                idx += 1
 
-                        # from corner before end to end point
-                        corner_before_end = corners[e_edge]
-                        pygame.draw.line(card_surface, color, corner_before_end, p_end, thickness)
+                            # from corner before end to end point
+                            corner_before_end = corners[e_edge]
+                            pygame.draw.line(card_surface, color, corner_before_end, p_end, thickness)
+                else:
+                    pygame.draw.rect(card_surface, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), width=min(self.rect.width, self.rect.height)//20, border_radius=10)
+            
+                img = pygame.transform.smoothscale(self.image, (self.rect.width - 10, self.rect.height - 10))
+                card_surface.blit(img, (5, 5))
             else:
+                # print(self.color)
+                pygame.draw.rect(card_surface, self.color, (0, 0, self.rect.width, self.rect.height), border_radius=10)
+                if self.locked:
+                    line_width = max(2, min(self.rect.width, self.rect.height) // 15)
+                    pygame.draw.line(card_surface, (100, 100, 100), (5, 5), (self.rect.width - 5, self.rect.height - 5), line_width)
+                    pygame.draw.line(card_surface, (100, 100, 100), (self.rect.width - 5, 5), (5, self.rect.height - 5), line_width) 
+                    
                 pygame.draw.rect(card_surface, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), width=min(self.rect.width, self.rect.height)//20, border_radius=10)
+                
+                # Dessiner une croix rouge si la carte est verrouillée
+                
         
-            img = pygame.transform.smoothscale(self.image, (self.rect.width - 10, self.rect.height - 10))
-            card_surface.blit(img, (5, 5))
-        else:
-            # print(self.color)
-            pygame.draw.rect(card_surface, self.color, (0, 0, self.rect.width, self.rect.height), border_radius=10) 
-            pygame.draw.rect(card_surface, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), width=min(self.rect.width, self.rect.height)//20, border_radius=10)
-    
 
-        scaled = pygame.transform.smoothscale(card_surface, (width, self.rect.height))
-        offset_x = (self.rect.width - width) // 2
+            scaled = pygame.transform.smoothscale(card_surface, (width, self.rect.height))
+            offset_x = (self.rect.width - width) // 2
 
-        # rotation based on dziit_progress (0..1 -> 0..360 degrees)
-        angle = (-1 if ((self.dziit_progress*100)//25)%2 else 1)*((self.dziit_progress*100)//25*4)
-        rotated = pygame.transform.rotate(scaled, angle)
+            # rotation based on dziit_progress (0..1 -> 0..360 degrees)
+            angle = (-1 if ((self.dziit_progress*100)//25)%2 else 1)*((self.dziit_progress*100)//25*4)
+            rotated = pygame.transform.rotate(scaled, angle)
 
-        # keep rotation centered on the card's visible area
-        center_x = self.x + offset_x + width / 2
-        center_y = self.y + self.rect.height / 2
-        rot_rect = rotated.get_rect(center=(center_x, center_y))
+            # keep rotation centered on the card's visible area
+            center_x = self.x + offset_x + width / 2
+            center_y = self.y + self.rect.height / 2
+            rot_rect = rotated.get_rect(center=(center_x, center_y))
 
-        surface.blit(rotated, rot_rect.topleft)
-    
+            surface.blit(rotated, rot_rect.topleft)
     def dzzit(self, color=COLORS_MODIFIERS["dzzit"]) :
         global charge
         if objects_lvl.get("Canon_A_Energie",0) : charge += 1
@@ -1389,6 +1411,7 @@ def create_board(num_pairs, x, y, width, height,  forced_pairs = None, only_lvl_
     rows = int(math.sqrt(total_cards))
     cols = math.ceil(total_cards / rows)
     playing_field = grid((x,y), width, height, cols=cols, rows=rows,square=True)
+    
 
     if only_lvl_up_disponible :
         try :
@@ -1441,8 +1464,11 @@ def create_board(num_pairs, x, y, width, height,  forced_pairs = None, only_lvl_
         card.row = i // cols
         card.col = i % cols
 
+
+
         # # FOR TEST
         # card.tags.add(("michel",3))
+        # card.locked = 2
     return playing_field, cards, cols, rows
 
 
@@ -1467,7 +1493,9 @@ def get_color_life(bonus, malus, protec) :
     else :
         return (255,100,100)
     
-def update_draw_score(score = player_score, lives = player_lives) :
+def update_draw_score(score = player_score, lives = player_lives, from_boss : "Boss" =False) :
+        from_boss : "Boss" = from_boss or actual_boss # Si on est dans un combat de boss, on affiche le score à atteindre
+        
         if score[1] > 0 and pygame.time.get_ticks() - last_score_change_tick > BEFORE_ADDING  :
             score[1] = score[1] / ADDING_SPEED
             if score[1]<1 : score[1]=0
@@ -1476,8 +1504,9 @@ def update_draw_score(score = player_score, lives = player_lives) :
             score[2] = score[2] / (max(1.1,ADDING_SPEED/2))
             if score[2]>-1 : score[2]=0
         
-        score_display = math.ceil(score[0] - score[1] - score[2])
-        score_text = font.render(f"Score : {score_display} {'+ '+str(math.floor(score[1])) if score[1] else ''} {'- '+str(abs(math.floor(score[2]))) if score[2] else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
+        global this_level_score
+        score_display = math.ceil((this_level_score if from_boss and from_boss.score_to_reach else score[0]) - score[1] - score[2])
+        score_text = font.render(f"Score : {score_display}{' + '+str(math.floor(score[1])) if score[1] else ''}{' - '+str(abs(math.floor(score[2]))) if score[2] else ''}{' / '+str(from_boss.score_to_reach) if from_boss and from_boss.score_to_reach else ''}", True, (255, 255, 255) if (not score[1] and not score[2]) else (255,0,0) if not score[1] else (0,255,100))
 
 
         if lives[1] > 0 and pygame.time.get_ticks() - last_live_change_tick > BEFORE_ADDING  :
@@ -1498,8 +1527,9 @@ def update_draw_score(score = player_score, lives = player_lives) :
         max_atteint = life_display==max_player_live
         life_text = font.render(f"Vies : {life_display}{'/'+str(max_player_live) if max_atteint else ''} {'+ '+str(math.floor(lives[1])) if lives[1] else ''} {'- '+str(abs(math.floor(lives[2]))) if lives[2] else ''} {'['+str(abs(math.floor(lives[3])))+']' if lives[3]<0 else '' }", True, get_color_life(lives[1], lives[2], lives[3]))
 
-
-
+        if from_boss and from_boss.nb_errors_tolerated :
+            errors_text = font.render(f"Erreurs : {from_boss.nb_errors}/{from_boss.nb_errors_tolerated}", True, (255, 255, 255))
+            screen.blit(errors_text, (20, 100))
         screen.blit(score_text, (20, 20))
         screen.blit(life_text, (20, 60))
 
@@ -1687,9 +1717,11 @@ def update_clock(waiting = 0) :
 
 def add_score(action_or_int, extravar=None) :
     global last_score_change_tick
+    global this_level_score
     last_score_change_tick = pygame.time.get_ticks()
     if isinstance(action_or_int, int) :
         player_score[0]+=action_or_int 
+        this_level_score += action_or_int
         if action_or_int >= 0 :
             player_score[1]+=action_or_int 
         else :
@@ -1697,6 +1729,7 @@ def add_score(action_or_int, extravar=None) :
     else :
         score_applique = bonus_score(action_or_int, extravar)
         player_score[0] += score_applique
+        this_level_score += score_applique
         if score_applique >= 0 :
             player_score[1] += score_applique
         else :
@@ -1925,14 +1958,28 @@ def check_resize(event) :
         global last_window_size_change
         last_window_size_change = gtick()
 
+class Boss():
 
+    def __init__(self, nom="Boss_Test", nb_errors_tolerated=None, score_to_reach=100, skills=None):
+        self.nom = nom
+        self.nb_errors_tolerated = nb_errors_tolerated
+        self.nb_errors = 0
+        self.score_to_reach = score_to_reach
+        self.skills = skills or []
+        
+    def activate_skills(self, cards, move_number):
+        for skill in self.skills:
+            skill(cards, move_number)
+    
 
 
 
 # --- JEU PRINCIPAL ---
-def play_memory(num_pairs=8, forced_cards = None):
-    global selection_locked, move, last_succeed_move, combo
+def play_memory(num_pairs=8, forced_cards = None, from_boss=None):
+    global selection_locked, move, last_succeed_move, combo, this_level_score, actual_boss
     cards : list["Card"]
+
+
 
     
     taille = round(min(SCREEN_HEIGHT*6/8, SCREEN_WIDTH*6/8)) # de carte
@@ -1944,6 +1991,14 @@ def play_memory(num_pairs=8, forced_cards = None):
     ending = 0
     move = 1
     first_move_effect = 0
+    this_level_score = 0
+    actual_boss = from_boss
+    kill_by_boss = False
+
+    message_boss = f"Combat contre {from_boss.nom} !" if from_boss else ""
+    message_boss_surf = None
+    if message_boss :
+        message_boss_surf = create_optimal_msg(message_boss, global_grid.col_size(4), global_grid.row_size(1), bold=True, color = (255,100,100))
 
     last_window_changed_local = gtick()
 
@@ -1977,6 +2032,9 @@ def play_memory(num_pairs=8, forced_cards = None):
                 margin = round(playing_field.col_size()*0.05)
                 for card in cards :
                     card.change_size_cords(size, *playing_field.coords(card.col, card.row, marging=margin))
+                
+                if message_boss :
+                    message_boss_surf = create_optimal_msg(message_boss, global_grid.col_size(4), global_grid.row_size(1), bold=True, color = (255,100,100))
 
             
 
@@ -1996,7 +2054,7 @@ def play_memory(num_pairs=8, forced_cards = None):
                 if not selection_locked :
                     if getattr(event, "button", None) == 2 : # touche de pré-selection (clique molette)
                         for card in cards:
-                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and (card not in selection): # on vérifie que la carte est cliquée et qu'elle n'est pas déjà retirée / révélée
+                            if card.rect.collidepoint(event.pos) and not card.matched and not card.flipped and not card.remove and not card.locked and (card not in selection): # on vérifie que la carte est cliquée et qu'elle n'est pas déjà retirée / révélée
                                 if card.selected : # si la carte est déjà sélectionnée (sans avoir été retournée), on la désélectionne 
                                     card.selected = False
                                     selection.remove(card)
@@ -2017,7 +2075,7 @@ def play_memory(num_pairs=8, forced_cards = None):
                             if card.selected and not card.remove and not card.flipped :
                                 card.flipped = True
                             
-                            if not card in selection and not card.remove and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos)  :
+                            if not card in selection and not card.remove and not card.selected and len(selection) < SELECTION_LIMIT and card.rect.collidepoint(event.pos) and not card.locked :
                                 card.selected = True 
                                 selection.append(card)
                                 card.flipped = True
@@ -2028,6 +2086,9 @@ def play_memory(num_pairs=8, forced_cards = None):
         # mise à jour
         for card in cards:
             card.update()
+        
+        if message_boss_surf :
+            screen.blit(message_boss_surf, global_grid.place(message_boss_surf, 3, 0, 4, 1))
 
         # effets de début de manche
         if not first_move_effect :
@@ -2077,6 +2138,7 @@ def play_memory(num_pairs=8, forced_cards = None):
                     else:
                         add_lives(-1, from_ = selection, all_cards=cards) # perte de vie si pas de match
                         add_score("dontmatch") 
+                        if from_boss : from_boss.nb_errors += 1
                         for c in selection: # on retourne les cartes
                             c.flipped = False
 
@@ -2091,6 +2153,9 @@ def play_memory(num_pairs=8, forced_cards = None):
 
                     for o, lvl in objects_lvl.items() : # on active les effets des objets
                         activate_object_effect(o,lvl, cards)
+                    
+                    if from_boss :
+                        from_boss.activate_skills(cards, move)
 
                     # on prépare le prochain tour
                     
@@ -2113,27 +2178,48 @@ def play_memory(num_pairs=8, forced_cards = None):
 
         # conditions de fin
         if all(c.remove for c in cards) and player_lives[0] > 0:
-            
-            update_draw_score(player_score, player_lives)
-            gain_eclat = get_end_of_round_eclat(cards)
-            end_text = font.render(f"Grille terminée ! Eclats Gagnés : {gain_eclat}", True, (255, 255, 0))
-            screen.blit(end_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
-            end_text2 = font.render(f"PV regagné : {regain_PV_manche}", True, (255,150,150))
-            screen.blit(end_text2, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + end_text.get_height()+5))
-            if not ending :
-                add_score("end_play")
-                add_eclat(gain_eclat)
-                add_lives(regain_PV_manche)
-            ending = True
+
+            if from_boss and this_level_score < from_boss.score_to_reach :
+                refresh()
+                cards.clear()
+                end_text = font.render(f"{from_boss.nom} n'a pas été convaincu(e) ...", True, (255, 50, 50))
+                screen.blit(end_text, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2))
+                selection_locked = True
+                ending = True
+                add_lives(-player_lives[0]) # on met les vies à 0
+                kill_by_boss = True
+            else :
+                update_draw_score(player_score, player_lives, from_boss=actual_boss)
+                gain_eclat = get_end_of_round_eclat(cards)
+                end_text = font.render(f"Grille terminée ! Eclats Gagnés : {gain_eclat}", True, (255, 255, 0))
+                screen.blit(end_text, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2))
+                end_text2 = font.render(f"PV regagné : {regain_PV_manche}", True, (255,150,150))
+                screen.blit(end_text2, (SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 + end_text.get_height()+5))
+                if not ending :
+                    add_score("end_play")
+                    add_eclat(gain_eclat)
+                    add_lives(regain_PV_manche)
+                ending = True
+                
 
         
-        elif player_lives[0] <= 0:
+        elif player_lives[0] <= 0 and not kill_by_boss:
             refresh()
             cards.clear()
             end_text = font.render("Plus de vies !", True, (255, 50, 50))
             screen.blit(end_text, (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2))
             selection_locked = True
             ending = True
+        
+        elif from_boss and from_boss.nb_errors_tolerated and from_boss.nb_errors >= from_boss.nb_errors_tolerated :
+            refresh()
+            cards.clear()
+            end_text = font.render(from_boss.nom+" n'a pas été convaincu(e) ...", True, (255, 50, 50))
+            screen.blit(end_text, (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2))
+            selection_locked = True
+            ending = True
+            add_lives(-player_lives[0]) # on met les vies à 0
+            kill_by_boss = True
         
         
         update_clock()
@@ -2142,7 +2228,7 @@ def get_apparition_cards() :
     """Renvoit la liste des cartes qui apparaitrons spontannément"""
     res = []
     for name, prob in apparation_probability.items() :
-        if get_random("apparation") <= prob :
+        if get_random("apparation_"+name) <= prob :
             res.append(name)
     
     return res
@@ -2303,6 +2389,12 @@ def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, me
         update_draw_cards(all_cards)
         if message :
             show_message(message, message_color, recenterx=False)
+        for event in pygame.event.get():
+            check_resize(event)
+            acceleration(event)
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
         update_clock()
     
     card1.col, card1.row, card2.col, card2.row = card2.col, card2.row, card1.col, card1.row
@@ -3254,7 +3346,7 @@ def benediction_ou_pacte() :
 
     benec_name = seed_choice(all_benec, "benediction_choice")
     malec_name = seed_choice(all_malec, "pacte_choice")
-    malec_name_malus = seed_choice([malus for malus in all_malus if malus!="solitude_malus" or sum(apparation_probability)>0.8], "pacte_malus_choice")
+    malec_name_malus = seed_choice([malus for malus in all_malus if malus!="solitude_malus" or sum(apparation_probability.values())>0.8], "pacte_malus_choice")
 
     card_benec = Card(
         max(0,SCREEN_WIDTH//4 - (size:=global_grid.min_size(2))//2), global_grid.coords(1,5)[1],
@@ -3432,10 +3524,78 @@ def apply_benection_or_pacte(name_bonus):
             case "trou_malus" :
                 global gain_eclat_bonus_manche 
                 gain_eclat_bonus_manche * 0.8
+            case "benec_providence" :
+                scores_constantes_modifiers_plus["add_tag"]= scores_constantes_modifiers_plus.get("match",0) + 2
+            case "fatigue_malus" :
+                global showing_time
+                showing_time = int(showing_time*0.8) + 1
                 
     
     benec_and_malec.append(name_bonus)
 
+
+def a_random_shuffle(cards, _):
+    # Prends 2 cartes non retirés et les mélange
+    
+    available_cards = [card for card in cards if not card.remove]
+    if len(available_cards) < 2 :
+        return
+    else :
+        card1, card2 = seed_sample(available_cards, 2, "a_random_shuffle_choice")
+        switch_place(card1, card2, cards, 800, "Mélange !", message_color=(240, 40, 200))
+
+def lock_cards(cards, cards_to_lock=3, lock_duration=1, nb_preserved_cards=3):
+
+    cards_to_lock = min(max(0,sum(1 for card in cards if not card.locked and not card.remove)-nb_preserved_cards), cards_to_lock)
+    cards_locked = seed_sample(cards, cards_to_lock, "lock_cards_boss") 
+    card:Card
+    for card in cards_locked:
+        card.set_lock(lock_duration)
+    
+    if cards_locked : pop_up(cards_locked, "VERROUILLÉ", cards, (100,100,100), time=1000)
+
+
+ALL_BOSS_SKILLS  = {"shuffle": a_random_shuffle, "lock" : lock_cards}
+ALL_BOSS_SKILLS_LIST = list(ALL_BOSS_SKILLS.values())
+
+
+def get_boss(round_number, nb_pairs):
+    is_boss = False
+
+    to_reach = None
+    errors = None
+    name = ""
+
+    skills = []
+
+    score_pallier = (10, 30, 50, 100, 200, 1000, 3000, 8000, 15000, 50000, 100000, 1000000, 1000000000, 100000000000000)
+
+
+    if round_number == 10 :
+        is_boss = True
+        errors = nb_pairs * 2
+        skills.append(ALL_BOSS_SKILLS["shuffle"])
+        name = "Le Grand Mélangeur"
+    elif round_number == 15 :
+        is_boss = True
+        to_reach = nb_pairs * 5 + score_pallier[0]
+        name = "Premier Testeur"
+    elif round_number >= 20 and round_number % 5 == 0 :
+        is_boss = True
+        errors = int(nb_pairs * 2.5)
+        to_reach = nb_pairs * 5 + score_pallier[((round_number-20)//5)]
+
+        name = "Le "+str((round_number-20)//5 + 2)+"ème Testeur"
+        skills.append(ALL_BOSS_SKILLS["lock"])
+        # skills.append(ALL_BOSS_SKILLS_LIST[round_number//5 % len(ALL_BOSS_SKILLS_LIST)])
+    
+    if is_boss:
+        return Boss(name, to_reach, errors, skills)
+
+    
+
+
+    
 
 
 def do_next() :
@@ -3461,7 +3621,7 @@ def do_next() :
             switch_bg_to(BG_COLORS["play"])
 
             selection_locked = False
-            play_memory(num_pairs= 2+((game["round"]+1)//3), forced_cards=get_apparition_cards())
+            play_memory((num_pairs:= round(2+((game["round"])/increase_difficulty))), forced_cards=get_apparition_cards(), from_boss=get_boss(game["round"], num_pairs))
 
             memo_shopped = False
 

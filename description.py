@@ -74,6 +74,8 @@ benedictions_maledictions = lambda args : ({
     "exhaustion_malec": ("Améliore le niveau des marques infligés de 2 pour toute les marques",),
     "fier_entrainement_benec": ("Vous avez 1 choix supplémentaire lors des entrainements",),
     "trou_malus": ("Réduit de 20% le nombre d'éclats gagnés à la fin de chaque manche",),
+    "benec_providence":("+2 pt par marque placée",),
+    "fatigue_malus":("Votre durée d'affichage des cartes joué actuel est réduit de 20%",)
 }).get(args.get("nom",""))
 
 
@@ -152,6 +154,8 @@ DISPLAY_NAMES = {
     "exhaustion_malec":"Pacte d'Exhaustion",
     "fier_entrainement_benec":"Bénédiction de l'Entraînement Fier",
     "trou_malus":"Malediction des trous",
+    "fatigue_malus":"Cerveau qui fatigue",
+    "benec_providence":"Bénédiction des Récoltes"
 }
 
 PRONOUNS = {
