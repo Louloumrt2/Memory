@@ -2179,7 +2179,7 @@ def play_memory(num_pairs=8, forced_cards = None, from_boss=None):
         # conditions de fin
         if all(c.remove for c in cards) and player_lives[0] > 0:
 
-            if from_boss and this_level_score < from_boss.score_to_reach :
+            if from_boss and this_level_score and from_boss.score_to_reach and this_level_score < from_boss.score_to_reach :
                 refresh()
                 cards.clear()
                 end_text = font.render(f"{from_boss.nom} n'a pas été convaincu(e) ...", True, (255, 50, 50))
