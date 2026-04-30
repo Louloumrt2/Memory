@@ -86,6 +86,9 @@ UPGRADES_COST = {
     "Celeste":5,
     "Trognon":4,
     "Bossu_Etoile":4,
+    "Les_Elemetistes":8,
+    "Ordinateur":5,
+    "Demon_De_Poche":6,
 }
 
 
@@ -281,6 +284,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
     regain_PV_manche = p_regain_PV_manche
     exhaustion_effect = p_exhaustion_effect
     expansion_effect = p_expansion_effect
+    random_event_use.clear()
 
     combo = 0
     last_succeed_move = 0
@@ -321,6 +325,7 @@ def start_run(start_lives=20, start_eclat=10, p_regain_PV_manche=2, p_level_upgr
 
 #=========================== MOUVEMENT ============================*
 from collections import deque
+
 
 # La classe mouvement sert à calculer la position d'un objet en fonction du temps, de la vitesse, de la trajectoire, etc.
 class Movement() :
@@ -818,6 +823,7 @@ class Card:
         self.matched = False
         self.flip_progress = 0
         self.remove = False
+        self.remove_progress = 0
         self.locked = False
         self.tags : set[tuple[str, int]] = set()
         
@@ -847,7 +853,8 @@ class Card:
         new_flip = self.flip_progress if self.flip_progress>0.85 else 0.15 + (1/2*(self.flip_progress-0.15))
         return max(1.5,((new_flip**4) * (2+self.englued)*10)) if self.englued else 1
     def update(self):
-        if self.remove : self.flip_progress = 0
+        if self.remove :
+            return 
 
         if self.flipped and self.flip_progress < 1:
             self.flip_progress += FLIP_SPEED / (100 if self.location!="proposal" else 500) 
@@ -943,10 +950,20 @@ class Card:
         self.locked = max(self.locked, duration)
 
     
-    def activate_effect(self, nb_match, selection, lesnoms, cards, lvl, already_done, nb_move, custom_name = None) :
+    def activate_effect(self, nb_match : int, selection : list["Card"], lesnoms, cards : list["Card"], lvl : int , already_done : list[str], nb_move : int, custom_name : None|str = None) :
         global awaiting_time
 
-        if lvl :
+        pixel_upgrade = 0
+
+        for c in selection :
+            if pixel_tag := c.get_tag("pixelise") :
+                pixel_upgrade += pixel_tag[1]
+        
+        print(pixel_upgrade)
+
+        lvl += pixel_upgrade
+
+        if lvl and not self.get_tag("dodo"):
             ability_name = self.name if not custom_name else custom_name
             match ability_name :
                 case "8_Volt" :
@@ -961,6 +978,16 @@ class Card:
                             try_put = card.put_tag(("michel",lvl,(0,255,0)), cards, from_=[self])
                             if try_put : cards_michelled.append(card)
                     if cards_michelled : pop_up(cards_michelled, "michellifié !", cards, message_color=(0,255,150),font=pop_up_font)
+                
+                case "Les_Elemetistes" :
+                    cards_elem = []
+                    for card in selection :
+                        if card != self and card.name != self.name :
+                            try_put = card.put_tag(("dodo",lvl,(255,210,210)), cards, from_=[self])
+                            try_put = card.put_tag(("soin",lvl,(255,120,120)), cards, from_=[self]) or try_put
+                            try_put = card.put_tag(("barag'eau",lvl,(200,200,255)), cards, from_=[self]) or try_put
+                            if try_put : cards_elem.append(card)
+                    if cards_elem : pop_up(cards_elem, "Dodo/Soin/Barag'eau !", cards, message_color=(255,255,255),font=pop_up_font, time=1000)
     
                 case "Max" :
                     cards_maxee = []
@@ -1105,6 +1132,19 @@ class Card:
                             add_score(combo*(1+(lvl//2)))
                             pop_up([self], f"+ {combo} x {lvl} !", cards, (255,120,30), pop_up_font, time=800)
                 
+                case "Smacker Girl" :
+                    if nb_match > 0 :
+                        if not "Smacker Girl" in already_done :
+                            already_done.append("Smacker Girl")
+                            smacker_girls = [card for card in selection if card.name == "Smacker Girl"]
+                            proximity_of_smackers =  []
+                            for smacker in smacker_girls :
+                                for card in not_removed_cards(cards) :
+                                    if card != smacker and est_adjacent(smacker, card, 1+lvl//3) and card not in proximity_of_smackers :
+                                        proximity_of_smackers.append(card)
+                            
+                            small_reveal(cards, cards, "Smack !", message_color=(255,50,50), font=pop_up_font, time=10+lvl*10, me=smacker_girls)
+                
                 case "Lori_Et_Les_Boaobs" :
 
                     if nb_match == 0 :
@@ -1178,19 +1218,15 @@ class Card:
                                 card.dzzit()
                             small_reveal(card_starified, cards, "Étoilé !", message_color=(255,255,50),font=font, time=showing_time*min(2,(1 + (len(card_starified)/10))), me=[self]+bossu_effect)
                         already_done.append("Bossu Etoile")
-
-
-
-                        
-
-
-
-
-                    
                 
+                case "Ordinateur" :
+                    cards_ordifie = []
+                    for card in selection :
+                        if card != self and not card.get_tag("pixelise"):
+                            try_put = card.put_tag(("pixelise",lvl,(0,0,0)), cards, from_=[self])
+                            if try_put : cards_ordifie.append(card)
+                    if cards_ordifie : pop_up(cards_ordifie, "Pixelisé !", cards, message_color=(40,150,255),font=pop_up_font)
 
-            
-        
         if self.tags :
             for tag in self.tags :
                 if "michel" == tag[0] :
@@ -1204,6 +1240,14 @@ class Card:
                     if nb_match > 0 :
                         pop_up([self], "Soigné !", cards, tag[2], pop_up_font, time=100)
                         add_lives(1, from_=[self], all_cards=cards)
+                
+                if "maudit" == tag[0] :
+                    if nb_match <= 0 and all(c.get_tag("maudit") for c in selection) and "Maudite erreure !!!" not in already_done:
+                        already_done.append("Maudite erreure !!!")
+                        add_lives(-1, from_=selection, all_cards=cards)
+                        pop_up(selection, "Maudite erreure !!!", cards, tag[2], pop_up_font, time=200)
+                        
+                        
         
         # Activer les effets des tags des autres cartes
 
@@ -1294,8 +1338,8 @@ class Card:
 
 
     def draw(self, surface):
-            if self.remove:
-                return      
+            if self.remove : # and self.remove_progress >= 1:
+                return
             
             progress = abs(1 - 2 * self.flip_progress) if not self.locked else 1
             width = max(1, int(self.rect.width * (progress)))   
@@ -1367,6 +1411,13 @@ class Card:
                     pygame.draw.rect(card_surface, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), width=min(self.rect.width, self.rect.height)//20, border_radius=10)
             
                 img = pygame.transform.smoothscale(self.image, (self.rect.width - 10, self.rect.height - 10))
+
+                # Pixeliser si un tag pixeliser dans tags
+                if pixel_tag := (self.get_tag("pixelise")) :
+                    pixel_size = pixel_tag[1]*2 + 1
+                    img = pygame.transform.scale(img, (self.rect.width // pixel_size, self.rect.height // pixel_size))
+                    img = pygame.transform.scale(img, (self.rect.width - 10, self.rect.height - 10))
+                    
                 card_surface.blit(img, (5, 5))
             else:
                 # print(self.color)
@@ -1379,7 +1430,7 @@ class Card:
                 pygame.draw.rect(card_surface, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), width=min(self.rect.width, self.rect.height)//20, border_radius=10)
                 
                 # Dessiner une croix rouge si la carte est verrouillée
-                
+                ...
         
 
             scaled = pygame.transform.smoothscale(card_surface, (width, self.rect.height))
@@ -1395,6 +1446,9 @@ class Card:
             rot_rect = rotated.get_rect(center=(center_x, center_y))
 
             surface.blit(rotated, rot_rect.topleft)
+
+
+
     def dzzit(self, color=COLORS_MODIFIERS["dzzit"]) :
         global charge
         if objects_lvl.get("Canon_A_Energie",0) : charge += 1
@@ -1600,9 +1654,9 @@ def add_lives(ch, extra_var=None, from_ : list[Card]|None = None, all_cards=None
     global last_live_change_tick
     last_live_change_tick = pygame.time.get_ticks()
 
-    if from_ and all_cards :
+    if from_ and all_cards and ch<0 :
         tanked = False
-        for troupe in from_ :
+        for troupe in from_:
             troupe_act = troupe
             tag = not troupe.break_barageau and troupe.get_tag("barageau")
             if tag and (get_random("barageau") < (tag[1]/(tag[1]+4))) :
@@ -1871,7 +1925,15 @@ def random_cols(cards, priviligies_bigger_col = 0, include_remove = False, event
     
     return [card for card in cards if card.col==num_col and not card.remove]
 
-
+def get_random_pair(cards, random_event_key) -> tuple[Card]:
+    not_removed = [card for card in cards if not card.remove]
+    seed_shuffle(not_removed,random_event_key)
+    if len(not_removed) > 0 :
+        to_find = not_removed[0]
+        for c in not_removed[1:] :
+            if ca_match(to_find, c) : return (to_find, c)
+    
+    return None
 
 
 
@@ -1898,6 +1960,31 @@ def activate_object_effect(objet, lvl, cards, start_of_round_effect=False) :
             if success : poisonned_cards.append(card)
         if success :
             pop_up(poisonned_cards, "Trognon !!", cards, (200,60,150))
+    
+    if objet=="Demon_De_Poche" and (start_of_round_effect or (lvl>=2 and not start_of_round_effect and get_random("Demon De Poche")<(lvl-1)/10)) :
+        good_or_bad = get_random("Demon De Poche")
+
+        if good_or_bad < (lvl+2)/(lvl+5) :
+            # good case : show a real couple
+            pair = get_random_pair(cards, "demon_de_poche_good_pair")
+        else :
+            # bad case, advice a false couple (mais pk je parle anglais en vrai ?)
+            pair = seed_choices(cards, k=2, event_name="demon_de_poche_bad_pair")
+
+        if pair :
+                c1 , c2 = pair
+                c1 : Card ; c2 : Card
+                c1.put_tag(("maudit", 1, (100,10,100)),cards)
+                c2.put_tag(("maudit", 1, (100,10,100)), cards)
+                add_show_effect("Demon_De_Poche", 800)
+                pop_up(pair, "Conseil du démon !", cards, (150,50,150), time=800)
+        
+
+        
+
+
+
+                
 
 
 
@@ -1920,6 +2007,13 @@ def est_adjacent(card1,card2, radius=1) :
 
     # print(f"{card1.name, card1.row, card1.col =}", f"{card2.name, card2.row, card2.col =}", sep=" | ")
     return abs(card1.row - card2.row) + abs(card1.col - card2.col)<=radius
+
+def get_the_other(card, cards) :
+    for card2 in cards :
+        if card2 != card and ca_match(card, card2) and not card2.remove :
+            return card2
+    return None
+
 
 def wait_with_cards(cards,time, fun=None) :
     init = gtick()
@@ -1970,7 +2064,6 @@ class Boss():
     def activate_skills(self, cards, move_number):
         for skill in self.skills:
             skill(cards, move_number)
-    
 
 
 
@@ -2117,7 +2210,9 @@ def play_memory(num_pairs=8, forced_cards = None, from_boss=None):
                     if any(names.count(name)> 1 for name in names) :
                         combo = combo + 1
                     else :
-                        if fighters_lvl.get("Felinfeu",0) >= 4 and any(card.name=="Felinfeu" for card in selection) :
+                        pixel_fire = sum(tag[1] for card in selection if card.name=="Felinfeu" and (tag := card.get_tag("pixelise")))
+
+                        if fighters_lvl.get("Felinfeu",0)+pixel_fire >= 4 and any(card.name=="Felinfeu" for card in selection) :
                             pop_up([card for card in selection if card.name=="Felinfeu"], "COMBO INNARETABLE", cards, (255,200,30))
                         else :
                             combo = 0
@@ -2135,6 +2230,7 @@ def play_memory(num_pairs=8, forced_cards = None, from_boss=None):
                             c.matched = True
                             c.flipped = False
                             c.remove = True
+                            c.remove_progress = 0
                     else:
                         add_lives(-1, from_ = selection, all_cards=cards) # perte de vie si pas de match
                         add_score("dontmatch") 
@@ -2353,6 +2449,7 @@ def get_bonus_lvl(name) :
     if fighters_lvl.get(name,0) == 0 : return 1 + benec_and_malec.count('default_malec')
     nb = get_random("bonus_lvl")
     return level_upgrade_base + sum(1 for threshold in bonus_lvl_probabilities if nb <= threshold)
+
 
 def switch_place(card1: Card,card2 : Card, all_cards, time=500, message=None, message_color = (255,255,255), font=font, me : None|list[Card]=None):
     assert card1 in all_cards and card2 in all_cards
@@ -2797,7 +2894,7 @@ def end_run() :
 last_cards_shop = []
 
 def memo_shop_present():
-    cards_images = seed_sample(all_objects_images,shop_choices, event_name="memo_shop_present")
+    cards_images = seed_sample([card for card in all_objects_images if UPGRADES_COST.get(card[0])],3, event_name="memo_shop_sample")
     
     last_cards_shop.clear()
 
@@ -2985,9 +3082,15 @@ def memo_shop_receive() :
                 for card in selection :
                     card.selected = False
                     card.remove = True 
+                    card.remove_progress = 0
+
+
                     for card2 in card_upgrades :
                         if card2.name==card.name :
                             card2.remove = True
+                            card2.remove_progress = 0
+
+
                 selection.clear()
             elif validation(event) and wait_for_respons :
                 if selection[0].name == selection[1].name and (cost := UPGRADES_COST.get(selection[0].name, 0)*(objects_lvl.get(selection[0].name, 0)+1)) <= eclat[0] :
@@ -3262,6 +3365,7 @@ def lvl_rain(num_pairs=8, forced_cards = None):
                             c.matched = True
                             c.flipped = False
                             c.remove = True
+                            c.remove_progress = 0
                     else:
                         # add_lives(-1)
                         add_score("dontmatch")
@@ -3273,6 +3377,7 @@ def lvl_rain(num_pairs=8, forced_cards = None):
                             card.selected = False
                             if card.name in names :
                                 card.remove = True
+                                c.remove_progress = 0
                     
                     for card in cards :
                         card.check_modification(move)
@@ -3383,12 +3488,12 @@ def benediction_ou_pacte() :
     description_surface_benec = generer_message_de_description(
         {"nom": benec_name,
          "for_benec_or_malec": True},
-         width=global_grid.col_size(4), height=global_grid.row_size(2), for_benec=True)
+         width=global_grid.col_size(4), height=global_grid.row_size(3), for_benec=True)
     
     description_surface_malec = generer_message_de_description(
         {"nom": malec_name,
         "for_benec_or_malec": True},
-        width=global_grid.col_size(4), height=global_grid.row_size(2), for_benec=True)
+        width=global_grid.col_size(4), height=global_grid.row_size(3), for_benec=True)
     
     waiting = True
     
@@ -3521,7 +3626,7 @@ def apply_benection_or_pacte(name_bonus):
             case "solitude_malus" :
                 for prob in apparation_probability :
                     apparation_probability[prob] = apparation_probability[prob]/2
-            case "trou_malus" :
+            case "trous_malus" :
                 global gain_eclat_bonus_manche 
                 gain_eclat_bonus_manche * 0.8
             case "benec_providence" :
@@ -3544,12 +3649,28 @@ def a_random_shuffle(cards, _):
         card1, card2 = seed_sample(available_cards, 2, "a_random_shuffle_choice")
         switch_place(card1, card2, cards, 800, "Mélange !", message_color=(240, 40, 200))
 
-def lock_cards(cards, cards_to_lock=3, lock_duration=1, nb_preserved_cards=3):
+def lock_cards(cards, _, cards_to_lock=3, lock_duration=1, nb_preserved_cards=3):
 
-    cards_to_lock = min(max(0,sum(1 for card in cards if not card.locked and not card.remove)-nb_preserved_cards), cards_to_lock)
-    cards_locked = seed_sample(cards, cards_to_lock, "lock_cards_boss") 
+    cards = list(card for card in cards if not card.remove and not card.locked)
+
+    cards_to_lock = min(max(0,len(cards)-nb_preserved_cards), cards_to_lock)
+    card_shuffles = (cards.copy())
+    cards_locked = []
+    cards_locked_names = set()
+    seed_shuffle(card_shuffles, "boss_lock")
+    # cards_locked = seed_sample(cards, cards_to_lock, "lock_cards_boss") 
     card:Card
-    for card in cards_locked:
+
+    for card in card_shuffles:
+        if sum(0.5 for c in cards if c.name not in cards_locked_names)>1 : # Si il existe deux paires encore possible a executer
+            cards_locked_names.add(card.name)
+            cards_locked.append(card)
+
+
+        if len(cards_locked)>=cards_to_lock :
+            break
+    
+    for card in cards_locked :
         card.set_lock(lock_duration)
     
     if cards_locked : pop_up(cards_locked, "VERROUILLÉ", cards, (100,100,100), time=1000)
@@ -3582,7 +3703,7 @@ def get_boss(round_number, nb_pairs):
         name = "Premier Testeur"
     elif round_number >= 20 and round_number % 5 == 0 :
         is_boss = True
-        errors = int(nb_pairs * 2.5)
+        errors = int(nb_pairs * 1.5)
         to_reach = nb_pairs * 5 + score_pallier[((round_number-20)//5)]
 
         name = "Le "+str((round_number-20)//5 + 2)+"ème Testeur"
@@ -3657,6 +3778,9 @@ def do_next() :
                 memo_shop_receive()
             
             game["state"]= "training"
+        
+        else :
+            return
     switch_bg_to(BG_COLORS["end"])
     end_run()
 
@@ -3694,20 +3818,19 @@ if __name__ == "__main__":
     #     add_object(o)
 
     start_run(**run_parameter)
-    # apparation_probability["Lori_Et_Les_Boaobs"]=1
-    # fighters_lvl["Lori_Et_Les_Boaobs"]=7
+    #apparation_probability["Felinfeu"]=1
+    #apparation_probability["Ordinateur"]=1
+
+    #
     # apparation_probability["Lo"]=1
     # fighters_lvl["Lo"]=4
     # run_seed="m"
 
-    # guaranted_objet = [("Trognon",1)] # (nom, niveau)
+#
     # for o, lvl in guaranted_objet :
     #     objects_lvl[o] = lvl 
     #     add_object(o)
 
-
-    # game["state"]="training"
-
-
     while True :
+        # benediction_ou_pacte()
         do_next()
